@@ -13,7 +13,7 @@ import { PreferencesStore, HistoryStore } from '../services/preferences'
 import { macNativeUpdateSupported } from '../services/code-signature'
 import { Updates, type UpdatePort } from '../services/updates'
 import { trayPresentation } from '../domain/tray-status'
-import { displayedOpenAtLogin, launchedHidden, loginItemQuery, loginItemRequest, loginToggleResult, type LoginItemReading } from '../services/login-item'
+import { canRegisterLoginItem, classifyInstallLocation, desiredOpenAtLogin, launchedHidden, loginItemQuery, loginItemRequest, loginItemsSettingsUrl, presentLoginItem, type LoginItemReading, type LoginItemState } from '../services/login-item'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const releasesUrl = 'https://github.com/Jarden-1/remind/releases'
@@ -33,10 +33,11 @@ const windowDisplays = new Map<number, number>()
 let preparingGeneration: number | null = null
 let tickTimer: ReturnType<typeof setInterval> | undefined
 let recoveryTimer: ReturnType<typeof setTimeout> | undefined
+let loginItem: LoginItemState = { openAtLogin: false, status: 'unsupported', approvalNeeded: false, message: null }
 const panelWidth = 368
-const panelHeight = 520
+const panelHeight = 464
 
-function state(): DesktopState { return { reminder: engine.snapshot, update: updates.snapshot, launchAtLogin: engine.getPreferences().openAtLogin } }
+function state(): DesktopState { return { reminder: engine.snapshot, update: updates.snapshot, launchAtLogin: loginItem.openAtLogin, loginItem } }
 function broadcast() {
   for (const { window, view } of managed.values()) if (!window.isDestroyed() && (window.isVisible() || view === 'break')) window.webContents.send('remind:changed', state())
 }
@@ -89,6 +90,7 @@ function showPanel() {
     const created = makeWindow('panel', { width: panelWidth, height: panelHeight, resizable: false, frame: false, minimizable: true, skipTaskbar: true, alwaysOnTop: true })
     panel = created.window
     panel.on('close', event => { if (!quitting) { event.preventDefault(); panel?.hide() } })
+    panel.on('focus', () => refreshLoginFromOs())
     void created.load().then(() => placePanel()).catch(error => log.error('Panel failed to load', error))
   } else { placePanel(); broadcast() }
 }
@@ -262,20 +264,51 @@ function setupIpc() {
   ipcMain.handle('remind:launch-at-login', (event, input: unknown) => {
     trusted(event, ['panel'])
     const enabled = z.boolean().parse(input)
-    if (process.platform !== 'darwin' && process.platform !== 'win32') return { openAtLogin: false, message: '当前系统不支持开机自启动' }
-    app.setLoginItemSettings(loginItemRequest(enabled))
-    const result = loginToggleResult(enabled, readLoginItem())
-    engine.setOpenAtLogin(result.openAtLogin)
-    try { preferences.write(engine.getPreferences()); engine.setStorageError(false) }
-    catch (error) { engine.setStorageError(true); log.error(error); throw new Error('开机自启动状态无法保存，请重试') }
+    if (process.platform !== 'darwin' && process.platform !== 'win32') {
+      loginItem = { openAtLogin: false, status: 'unsupported', approvalNeeded: false, message: '当前系统不支持开机自启动' }
+      engine.setLoginItem(false, true)
+      return { openAtLogin: false, message: loginItem.message, approvalNeeded: false }
+    }
+    engine.setLoginItem(enabled, true)
+    applyLoginItem(enabled)
+    persistLogin()
     broadcast()
-    return result
+    return { openAtLogin: loginItem.openAtLogin, message: loginItem.message, approvalNeeded: loginItem.approvalNeeded }
   })
+  ipcMain.handle('remind:launch-at-login-refresh', event => { trusted(event, ['panel']); refreshLoginFromOs() })
+  ipcMain.handle('remind:login-item-settings', event => { trusted(event, ['panel']); return shell.openExternal(loginItemsSettingsUrl) })
   ipcMain.handle('remind:ready', event => { trusted(event); readiness.get(event.sender.id)?.(); readiness.delete(event.sender.id) })
 }
+function loginPlatform(): 'darwin' | 'win32' | null {
+  return process.platform === 'darwin' || process.platform === 'win32' ? process.platform : null
+}
+function installLocation() {
+  if (process.platform !== 'darwin') return 'unsupported' as const
+  return classifyInstallLocation(app.getPath('exe'), app.isInApplicationsFolder())
+}
 function readLoginItem(): LoginItemReading {
-  if (process.platform !== 'darwin' && process.platform !== 'win32') return { openAtLogin: false }
-  return app.getLoginItemSettings(loginItemQuery())
+  const platform = loginPlatform()
+  if (!platform) return { openAtLogin: false }
+  return app.getLoginItemSettings(loginItemQuery(platform))
+}
+function publishLogin(requested: boolean) {
+  loginItem = presentLoginItem(readLoginItem(), installLocation(), requested)
+}
+function applyLoginItem(enabled: boolean) {
+  const platform = loginPlatform()
+  const location = installLocation()
+  if (platform && canRegisterLoginItem(location)) app.setLoginItemSettings(loginItemRequest(enabled, platform))
+  publishLogin(enabled)
+}
+function persistLogin() {
+  try { preferences.write(engine.getPreferences()); engine.setStorageError(false) }
+  catch (error) { engine.setStorageError(true); log.error(error); throw new Error('开机自启动状态无法保存，请重试') }
+}
+function refreshLoginFromOs() {
+  if (!engine) return
+  const prefs = engine.getPreferences()
+  publishLogin(desiredOpenAtLogin(prefs.loginItemChosen, prefs.openAtLogin))
+  broadcast()
 }
 function setupTray() {
   const icon = () => {
@@ -332,9 +365,11 @@ else {
     if (process.platform === 'darwin') app.dock?.hide()
     preferences = new PreferencesStore(app.getPath('userData'))
     const loginReading = readLoginItem()
-    const openAtLogin = displayedOpenAtLogin(loginReading)
-    const initial = { ...preferences.initial, openAtLogin }
-    if (preferences.initial.openAtLogin !== openAtLogin) {
+    const chosen = preferences.initial.loginItemChosen
+    const desired = desiredOpenAtLogin(chosen, preferences.initial.openAtLogin)
+    applyLoginItem(desired)
+    const initial = { ...preferences.initial, openAtLogin: desired, loginItemChosen: chosen }
+    if (preferences.initial.openAtLogin !== desired || preferences.initial.loginItemChosen !== chosen) {
       try { preferences.write(initial) } catch (error) { log.error('Cannot sync login item', error) }
     }
     const openedHidden = launchedHidden(process.argv, loginReading)

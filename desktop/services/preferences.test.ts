@@ -17,15 +17,17 @@ describe('native persistence', () => {
     expect(new PreferencesStore(dir).initial).toEqual(preferences)
     expect(Object.keys(JSON.parse(readFileSync(join(dir, 'preferences.json'), 'utf8')))).toEqual(['schemaVersion', 'preferences'])
   })
-  it('reads an older preferences file that has no login setting as off', () => {
+  it('reads a file from before the login choice as on, until the user toggles it', () => {
     const dir = directory()
     const preferences = freshPreferences()
     delete (preferences as { openAtLogin?: boolean }).openAtLogin
+    delete (preferences as { loginItemChosen?: boolean }).loginItemChosen
     delete (preferences as { pauseUntil?: string | null }).pauseUntil
     writeFileSync(join(dir, 'preferences.json'), JSON.stringify({ schemaVersion: 1, preferences }))
     const store = new PreferencesStore(dir)
     expect(store.recovered).toBe(false)
-    expect(store.initial.openAtLogin).toBe(false)
+    expect(store.initial.openAtLogin).toBe(true)
+    expect(store.initial.loginItemChosen).toBe(false)
     expect(store.initial.pauseUntil).toBe(null)
   })
   it('backs up corrupt and invalid settings, falling back to defaults', () => {

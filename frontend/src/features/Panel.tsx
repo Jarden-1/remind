@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { BellOff, BellRing, ChevronDown, Coffee, Minus, Pause, Play, RotateCcw, Settings2, CalendarDays } from 'lucide-react'
+import { BellOff, BellRing, ChevronDown, Coffee, Minus, Pause, Play, RotateCcw, Settings2, X } from 'lucide-react'
 import type { ReminderClient, ReminderSnapshot } from '../contracts/reminder'
 import { Brand } from '../components/Brand'
 import { TimerReadout } from '../components/TimerReadout'
@@ -114,22 +114,26 @@ export function Panel({ snapshot: s, client, onSettings, notify, updates, shell 
     <header className="window-header">
       <Brand />
       <div className="window-controls">
-        {shell && <button className="icon-button" aria-label="最小化" title="最小化" onClick={() => void shell.minimize()}><Minus size={16} /></button>}
-        <button className="icon-button" aria-label="打开设置" title="设置" onClick={onSettings}><Settings2 size={18} strokeWidth={1.6} /></button>
+        <button className="icon-button" aria-label="打开设置" title="设置" onClick={onSettings}><Settings2 size={16} strokeWidth={1.8} /></button>
+        {shell && <>
+          <span className="window-divider" aria-hidden="true" />
+          <button className="icon-button" aria-label="最小化" title="最小化" onClick={() => void shell.minimize()}><Minus size={16} strokeWidth={1.8} /></button>
+          <button className="icon-button window-close" aria-label="退出 remind" title="退出" onClick={() => void shell.quit()}><X size={16} strokeWidth={1.8} /></button>
+        </>}
       </div>
     </header>
     <div className="panel-body">
       <div className="timer-heading">
         <h1>距离下次休息</h1>
-        <span className={`timer-state ${paused || ready ? 'neutral' : ''}`}><span className="status-dot" />{title}</span>
+        <div className="timer-heading-tools">
+          <span className={`timer-state ${paused || ready ? 'neutral' : ''}`}><span className="status-dot" />{title}</span>
+          {!editing && <button className="time-reset" aria-label="重置计时" title="重置计时 (R)" onClick={() => run(client.resetTimer())}><RotateCcw size={14} strokeWidth={1.8} /></button>}
+        </div>
       </div>
       <div className="time-block">
-        {editing ? <IntervalEditor minutes={s.settings.workMinutes} onApply={value => applyMinutes('work', value)} onCancel={() => setEditing(false)} /> : <>
-          <button className="time-hit" aria-label={`剩余 ${Math.floor(s.remainingSeconds / 60)} 分 ${s.remainingSeconds % 60} 秒，点击修改提醒间隔`} title="点击修改提醒间隔" onClick={() => { setMenu(null); setEditing(true) }}>
-            <TimerReadout remaining={s.remainingSeconds} total={s.totalSeconds} paused={paused} />
-          </button>
-          <button className="time-reset" aria-label="重置计时" title="重置计时 (R)" onClick={() => run(client.resetTimer())}><RotateCcw size={14} /></button>
-        </>}
+        {editing ? <IntervalEditor minutes={s.settings.workMinutes} onApply={value => applyMinutes('work', value)} onCancel={() => setEditing(false)} /> : <button className="time-hit" aria-label={`剩余 ${Math.floor(s.remainingSeconds / 60)} 分 ${s.remainingSeconds % 60} 秒，点击修改提醒间隔`} title="点击修改提醒间隔" onClick={() => { setMenu(null); setEditing(true) }}>
+          <TimerReadout remaining={s.remainingSeconds} total={s.totalSeconds} paused={paused} />
+        </button>}
       </div>
       <div className="rhythm-controls">
         <div className="menu-anchor" data-choice>
@@ -179,10 +183,9 @@ export function Panel({ snapshot: s, client, onSettings, notify, updates, shell 
         {s.settings.sound ? <BellRing size={14} /> : <BellOff size={14} />}<span>铃声</span><span className={`state-pill${s.settings.sound ? ' on' : ''}`}>{s.settings.sound ? '开' : '关'}</span>
       </button>
       <button aria-label={s.settings.schedule.enabled ? '工作时段已开启，点击设置' : '工作时段已关闭，点击设置'} aria-pressed={s.settings.schedule.enabled} onClick={onSettings}>
-        <CalendarDays size={14} /><span>工作时段</span><span className={`state-pill${s.settings.schedule.enabled ? ' on' : ''}`}>{s.settings.schedule.enabled ? '开' : '关'}</span>
+        <Settings2 size={14} /><span>工作时段</span><span className={`state-pill${s.settings.schedule.enabled ? ' on' : ''}`}>{s.settings.schedule.enabled ? '开' : '关'}</span>
       </button>
     </footer>
-    {shell && <button className="quit-app" onClick={() => void shell.quit()}>退出 remind</button>}
     {s.storageError && <p className="storage-warning" role="alert">本地设置无法读取或保存，当前使用临时设置。</p>}
     {s.displayError && <p className="storage-warning" role="alert">休息窗口未能打开，请重试。</p>}
   </section>

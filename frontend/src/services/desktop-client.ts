@@ -1,5 +1,6 @@
 import type { ReminderClient, ReminderSettings, ReminderSnapshot } from '../contracts/reminder'
 import type { DesktopBridge, DesktopState, ReminderCommand, UpdateSnapshot } from '../../../shared/desktop'
+import type { LoginItemState } from '../../../shared/login-item'
 
 export interface UpdateClient {
   getUpdateSnapshot(): UpdateSnapshot
@@ -9,7 +10,10 @@ export interface UpdateClient {
 export interface ShellClient {
   subscribe(listener: () => void): () => void
   getLaunchAtLogin(): boolean
+  getLoginItem(): LoginItemState
   setLaunchAtLogin(enabled: boolean): Promise<string | null>
+  refreshLaunchAtLogin(): Promise<void>
+  openLoginItemsSettings(): Promise<void>
   minimize(): Promise<void>
   quit(): Promise<void>
 }
@@ -31,6 +35,7 @@ export class DesktopClient implements ReminderClient, UpdateClient, ShellClient 
       reminder: this.current && this.current.reminder.revision > state.reminder.revision ? this.current.reminder : state.reminder,
       update: this.current && this.current.update.revision > state.update.revision ? this.current.update : state.update,
       launchAtLogin: stale ? this.current.launchAtLogin : state.launchAtLogin,
+      loginItem: stale ? this.current.loginItem : state.loginItem,
     }
     for (const listener of this.listeners) listener()
   }
@@ -48,7 +53,13 @@ export class DesktopClient implements ReminderClient, UpdateClient, ShellClient 
   updateSettings = (settings: ReminderSettings) => this.bridge.settings(settings)
   update = (action: 'check' | 'download' | 'install' | 'releases') => this.bridge.update(action)
   getLaunchAtLogin = () => this.current.launchAtLogin
-  setLaunchAtLogin = async (enabled: boolean) => (await this.bridge.setLaunchAtLogin(enabled)).message
+  getLoginItem = () => this.current.loginItem
+  setLaunchAtLogin = async (enabled: boolean) => {
+    const result = await this.bridge.setLaunchAtLogin(enabled)
+    return result.approvalNeeded ? null : result.message
+  }
+  refreshLaunchAtLogin = () => this.bridge.refreshLaunchAtLogin()
+  openLoginItemsSettings = () => this.bridge.openLoginItemsSettings()
   minimize = () => this.bridge.minimize()
   quit = () => this.bridge.quit()
   resetTimer = () => this.command('resetTimer')
