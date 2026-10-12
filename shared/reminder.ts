@@ -18,6 +18,8 @@ export interface ReminderSnapshot {
   remainingSeconds: number
   totalSeconds: number
   pauseReasons: PauseReason[]
+  /** When a manual pause ends on its own. Null means the pause lasts until the user resumes. */
+  pauseUntil: string | null
   preReminderVisible: boolean
   lastInPeriod: boolean
   nextWorkAt: string | null
@@ -30,11 +32,15 @@ export interface ReminderClient {
   subscribe(listener: () => void): () => void
   start(): Promise<void>
   pause(): Promise<void>
+  /** Timed pauses resume on their own. `indefinite` waits for an explicit resume. */
+  pauseFor(duration: '30' | '60' | 'tomorrow' | 'indefinite'): Promise<void>
   resume(): Promise<void>
   startBreak(): Promise<void>
   endBreak(): Promise<void>
   dismissPreReminder(): Promise<void>
   resetTimer(): Promise<void>
+  /** Leave the current break and ask again after five minutes. */
+  snooze(): Promise<void>
   updateSettings(settings: ReminderSettings): Promise<void>
 }
 /** Preview controls deliberately stay outside the production UI contract. */

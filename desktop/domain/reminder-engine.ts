@@ -4,7 +4,7 @@ import { getScheduleState } from '../../shared/schedule'
 
 export interface Clock { monotonic(): number; now(): Date }
 export type BreakEvent = { version: 1; type: 'break.started' | 'break.ended'; id: string; at: string; outcome?: 'completed' | 'skipped' | 'interrupted' | 'display_failed' }
-export const freshPreferences = (): Preferences => ({ settings: structuredClone(DEFAULT_SETTINGS), started: false, manualPaused: false, openAtLogin: false })
+export const freshPreferences = (): Preferences => ({ settings: structuredClone(DEFAULT_SETTINGS), started: false, manualPaused: false, openAtLogin: false, pauseUntil: null })
 
 /** The main process is the sole clock. Renderers only send intent and display snapshots. */
 export class ReminderEngine {
@@ -27,11 +27,17 @@ export class ReminderEngine {
   private displayError = false
   private manualBreakOutside = false
   private sessionId = globalThis.crypto.randomUUID()
+  private pauseExpired = false
   generation = 0
   snapshot!: ReminderSnapshot
 
   constructor(private clock: Clock, preferences = freshPreferences()) {
     this.preferences = structuredClone(preferences)
+    this.preferences.pauseUntil ??= null
+    if (this.preferences.manualPaused && this.preferences.pauseUntil && Date.parse(this.preferences.pauseUntil) <= clock.now().getTime()) {
+      this.preferences.manualPaused = false
+      this.preferences.pauseUntil = null
+    }
     this.remainingMs = this.workMs
     this.lastMono = clock.monotonic()
     this.lastWall = clock.now().getTime()
@@ -60,7 +66,7 @@ export class ReminderEngine {
       revision: ++this.revision, phase: this.breaking ? 'break' : this.preferences.started ? 'work' : 'ready',
       settings: structuredClone(this.settings), remainingSeconds: Math.ceil(this.remainingMs / 1000),
       totalSeconds: (this.breaking ? this.breakTotalMs : this.workMs) / 1000,
-      pauseReasons: this.reasons(), preReminderVisible: this.preVisible,
+      pauseReasons: this.reasons(), pauseUntil: this.preferences.manualPaused ? this.preferences.pauseUntil : null, preReminderVisible: this.preVisible,
       lastInPeriod: Boolean(schedule.endAt && this.clock.now().getTime() + this.remainingMs >= schedule.endAt.getTime()),
       nextWorkAt: schedule.nextAt?.toISOString() ?? null,
       storageError: this.storageError, displayError: this.displayError, preparingBreak: this.preparing,
@@ -68,11 +74,26 @@ export class ReminderEngine {
     for (const listener of this.listeners) listener()
   }
   private markTime() { this.lastMono = this.clock.monotonic(); this.lastWall = this.clock.now().getTime() }
+  /** True once, after a timed pause reaches its deadline, so the host can persist the resume. */
+  takePauseExpired() { const expired = this.pauseExpired; this.pauseExpired = false; return expired }
+  private clearManualPause() { this.preferences.manualPaused = false; this.preferences.pauseUntil = null }
+  private expirePause() {
+    const until = this.preferences.pauseUntil
+    if (!this.preferences.manualPaused || !until || this.clock.now().getTime() < Date.parse(until)) return false
+    this.clearManualPause(); this.markTime(); this.pauseExpired = true; return true
+  }
+  private beginManualPause(until: string | null) {
+    this.preVisible = false
+    if (this.preparing || this.breaking) this.interrupt('interrupted')
+    this.preferences.manualPaused = true
+    this.preferences.pauseUntil = until
+  }
   tick() {
     const mono = this.clock.monotonic(), wall = this.clock.now().getTime()
     const elapsed = Math.max(0, mono - this.lastMono)
     const discontinuity = elapsed > 15_000 || Math.abs(wall - this.lastWall - elapsed) > 5000
     this.lastMono = mono; this.lastWall = wall
+    if (this.expirePause()) { this.publish(); return }
     const allowed = getScheduleState(this.settings, this.clock.now()).allowed
     if (allowed !== this.scheduleAllowed) {
       this.scheduleAllowed = allowed
@@ -80,7 +101,8 @@ export class ReminderEngine {
       this.publish(); return
     }
     // Sleep, throttling, or a wall clock jump must not cause a surprise full-screen break.
-    if (discontinuity) { this.interrupt('interrupted'); this.publish(); return }
+    // A manual pause already freezes the countdown, so a sleep during that pause must not refill it.
+    if (discontinuity && !this.preferences.manualPaused) { this.interrupt('interrupted'); this.publish(); return }
     if (this.preVisible && mono >= this.preUntil) this.preVisible = false
     if (this.breaking) {
       this.remainingMs = Math.max(0, this.remainingMs - elapsed)
@@ -98,18 +120,33 @@ export class ReminderEngine {
   }
   command(command: ReminderCommand) {
     this.tick()
-    if (command === 'start' && !this.preferences.started && !this.breaking && !this.preparing) { this.preferences.started = true; this.preferences.manualPaused = false; this.reset() }
+    if (command === 'start' && !this.preferences.started && !this.breaking && !this.preparing) { this.preferences.started = true; this.clearManualPause(); this.reset() }
     if (command === 'resetTimer') {
       if (this.preparing || this.breaking) this.interrupt('interrupted')
       this.preferences.started = true
-      this.preferences.manualPaused = false
+      this.clearManualPause()
       this.preVisible = false
       this.reset()
     }
-    if (command === 'pause') { this.preferences.manualPaused = true; this.preVisible = false; if (this.preparing || this.breaking) this.interrupt('interrupted') }
-    if (command === 'resume') { this.preferences.started = true; this.preferences.manualPaused = false }
+    if (command === 'pause') this.beginManualPause(null)
+    if (command === 'pause30') this.beginManualPause(new Date(this.clock.now().getTime() + 30 * 60_000).toISOString())
+    if (command === 'pause60') this.beginManualPause(new Date(this.clock.now().getTime() + 60 * 60_000).toISOString())
+    if (command === 'pauseUntilTomorrow') {
+      const next = new Date(this.clock.now().getTime())
+      next.setHours(24, 0, 0, 0)
+      this.beginManualPause(next.toISOString())
+    }
+    if (command === 'resume') { this.preferences.started = true; this.clearManualPause() }
     if (command === 'startBreak') this.requestBreak(true)
     if (command === 'endBreak') { if (this.breaking || this.preparing) this.interrupt('skipped') }
+    if (command === 'snooze' && (this.breaking || this.preparing)) {
+      this.interrupt('skipped')
+      this.preferences.started = true
+      this.clearManualPause()
+      this.remainingMs = 5 * 60_000
+      this.preSent = false
+      this.preVisible = false
+    }
     if (command === 'dismissPreReminder') this.preVisible = false
     this.markTime(); this.publish()
   }

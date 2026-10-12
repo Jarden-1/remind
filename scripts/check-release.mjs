@@ -27,5 +27,5 @@ if (invoked) {
     platform: process.env.RELEASE_PLATFORM,
     env: process.env,
   })
-  console.log(result.signed ? 'Release credentials present; installers will be signed.' : 'No signing credentials; installers will be unsigned.')
+  console.log(result.signed ? 'Release credentials present; installers will be signed with the Developer ID.' : 'No Developer ID credentials; Mac builds use an ad-hoc signature.')
 }

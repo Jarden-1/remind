@@ -229,9 +229,9 @@ function setupIpc() {
     const entry = trusted(event)
     const command = z.enum(commands).parse(input)
     if (entry.view === 'notice' && command !== 'dismissPreReminder') throw new Error('不允许的操作')
-    if (entry.view === 'break' && command !== 'endBreak') throw new Error('不允许的操作')
+    if (entry.view === 'break' && command !== 'endBreak' && command !== 'snooze') throw new Error('不允许的操作')
     engine.command(command)
-    if (['start', 'pause', 'resume', 'resetTimer'].includes(command)) persist()
+    if (['start', 'pause', 'pause30', 'pause60', 'pauseUntilTomorrow', 'resume', 'resetTimer', 'snooze'].includes(command)) persist()
   })
   ipcMain.handle('remind:settings', (event, input: unknown) => {
     trusted(event, ['panel'])
@@ -340,6 +340,7 @@ else {
     const openedHidden = launchedHidden(process.argv, loginReading)
     engine = new ReminderEngine({ monotonic: () => performance.now(), now: () => new Date() }, initial)
     engine.setStorageError(preferences.recovered)
+    if (initial.manualPaused !== engine.getPreferences().manualPaused || initial.pauseUntil !== engine.getPreferences().pauseUntil) persist()
     const history = new HistoryStore(app.getPath('userData'))
     engine.onEvent(event => { try { history.append(event) } catch (error) { log.error('Cannot save break history', error) } })
     const { autoUpdater } = electronUpdater
@@ -388,7 +389,7 @@ else {
     if (powerMonitor.getSystemIdleState(60) === 'locked') engine.setSystemPause('locked', true)
     const displaysChanged = () => { refreshBreakDisplays(); if (panel?.isVisible()) placePanel() }
     screen.on('display-added', displaysChanged); screen.on('display-removed', displaysChanged); screen.on('display-metrics-changed', displaysChanged)
-    tickTimer = setInterval(() => engine.tick(), 250)
+    tickTimer = setInterval(() => { engine.tick(); if (engine.takePauseExpired()) persist() }, 250)
     if (!openedHidden) showPanel()
   }).catch(error => { log.error('Startup failed', error); dialog.showErrorBox('remind 无法启动', '请检查本地数据目录是否可写，然后重试。'); quitting = true; app.quit() })
 }

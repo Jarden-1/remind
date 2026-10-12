@@ -26,6 +26,11 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
   constructor(private store: PreferenceStore, private clock: Clock = browserClock, autoTick = true) {
     try { this.prefs = store.read() ?? freshPreferences() }
     catch { this.prefs = freshPreferences(); this.storageError = true }
+    this.prefs.pauseUntil ??= null
+    if (this.prefs.manualPaused && this.prefs.pauseUntil && Date.parse(this.prefs.pauseUntil) <= clock.now().getTime()) {
+      this.prefs.manualPaused = false
+      this.prefs.pauseUntil = null
+    }
     this.remainingMs = this.prefs.settings.workMinutes * 60_000
     this.lastTick = clock.monotonic()
     this.previouslyOutside = !getScheduleState(this.prefs.settings, clock.now()).allowed
@@ -58,13 +63,19 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
       settings: structuredClone(this.prefs.settings),
       remainingSeconds: Math.ceil(this.remainingMs / 1000),
       totalSeconds: this.isBreak ? this.breakTotalMs / 1000 : this.prefs.settings.workMinutes * 60,
-      pauseReasons: this.reasons(), preReminderVisible: this.preVisible,
+      pauseReasons: this.reasons(), pauseUntil: this.prefs.manualPaused ? this.prefs.pauseUntil : null, preReminderVisible: this.preVisible,
       lastInPeriod: !this.isBreak && this.outsideOverride === null && !!schedule.endAt && this.clock.now().getTime() + this.remainingMs >= schedule.endAt.getTime(),
       nextWorkAt: schedule.nextAt?.toISOString() ?? null, storageError: this.storageError,
     }
     this.listeners.forEach(listener => listener())
   }
   tick() {
+    if (this.prefs.manualPaused && this.prefs.pauseUntil && Date.parse(this.prefs.pauseUntil) <= this.clock.now().getTime()) {
+      this.prefs.manualPaused = false
+      this.prefs.pauseUntil = null
+      this.lastTick = this.clock.monotonic()
+      this.save()
+    }
     const now = this.clock.monotonic()
     let elapsed = Math.max(0, now - this.lastTick)
     this.lastTick = now
@@ -89,14 +100,24 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
     this.breakTotalMs = this.prefs.settings.breakMinutes * 60_000
     this.remainingMs = this.breakTotalMs; this.lastTick = this.clock.monotonic()
   }
-  start = async () => { this.prefs.started = true; this.prefs.manualPaused = false; this.resetCycle(); this.save(); this.publish() }
-  pause = async () => {
+  start = async () => { this.prefs.started = true; this.prefs.manualPaused = false; this.prefs.pauseUntil = null; this.resetCycle(); this.save(); this.publish() }
+  pause = async () => { await this.pauseFor('indefinite') }
+  pauseFor = async (duration: '30' | '60' | 'tomorrow' | 'indefinite') => {
     this.tick()
     if (this.isBreak) this.resetCycle()
-    this.prefs.manualPaused = true; this.preVisible = false; this.save(); this.publish()
+    this.prefs.manualPaused = true
+    this.preVisible = false
+    if (duration === '30') this.prefs.pauseUntil = new Date(this.clock.now().getTime() + 30 * 60_000).toISOString()
+    else if (duration === '60') this.prefs.pauseUntil = new Date(this.clock.now().getTime() + 60 * 60_000).toISOString()
+    else if (duration === 'tomorrow') {
+      const next = new Date(this.clock.now().getTime())
+      next.setHours(24, 0, 0, 0)
+      this.prefs.pauseUntil = next.toISOString()
+    } else this.prefs.pauseUntil = null
+    this.save(); this.publish()
   }
   resume = async () => {
-    this.lastTick = this.clock.monotonic(); this.prefs.manualPaused = false; this.prefs.started = true
+    this.lastTick = this.clock.monotonic(); this.prefs.manualPaused = false; this.prefs.pauseUntil = null; this.prefs.started = true
     this.save(); this.publish()
   }
   startBreak = async () => {
@@ -104,12 +125,24 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
     this.beginBreak(); this.publish()
   }
   endBreak = async () => { if (this.isBreak) { this.resetCycle(); this.publish() } }
+  snooze = async () => {
+    if (!this.isBreak) return
+    this.resetCycle()
+    this.prefs.started = true
+    this.prefs.manualPaused = false
+    this.prefs.pauseUntil = null
+    this.remainingMs = 5 * 60_000
+    this.lastTick = this.clock.monotonic()
+    this.save()
+    this.publish()
+  }
   dismissPreReminder = async () => { this.preVisible = false; this.publish() }
   resetTimer = async () => {
     this.tick()
     if (this.isBreak) this.resetCycle()
     this.prefs.started = true
     this.prefs.manualPaused = false
+    this.prefs.pauseUntil = null
     this.preSent = false
     this.preVisible = false
     this.remainingMs = this.prefs.settings.workMinutes * 60_000

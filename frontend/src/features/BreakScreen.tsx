@@ -6,15 +6,16 @@ import { formatTime } from '../lib/format'
 
 export function BreakScreen({ snapshot: s, client, notify, desktop = false }: { snapshot: ReminderSnapshot; client: ReminderClient; notify: (message: string) => void; desktop?: boolean }) {
   const surface = useRef<HTMLElement>(null)
-  async function end() {
-    await client.endBreak()
+  async function leave(action: 'end' | 'snooze') {
+    if (action === 'snooze') await client.snooze()
+    else await client.endBreak()
     if (document.fullscreenElement) await document.exitFullscreen().catch(() => {})
   }
   useEffect(() => {
     const focusSurface = () => surface.current?.focus({ preventScroll: true })
     focusSurface()
     window.addEventListener('focus', focusSurface)
-    const keydown = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); void end() } }
+    const keydown = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); void leave('end') } }
     window.addEventListener('keydown', keydown)
     return () => { window.removeEventListener('focus', focusSurface); window.removeEventListener('keydown', keydown); if (document.fullscreenElement) void document.exitFullscreen().catch(() => {}) }
     // The bridge instance is stable for the lifetime of the app.
@@ -36,7 +37,10 @@ export function BreakScreen({ snapshot: s, client, notify, desktop = false }: { 
         <div><span className="break-time">{formatTime(s.remainingSeconds)}</span><span className="countdown-caption">后继续</span></div>
         <div className="break-progress" role="progressbar" aria-label="休息进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)}><span style={{ transform: `scaleX(${progress})` }} /></div>
       </div>
-      <footer className="break-footer"><button className="end-break" onClick={() => void end()}>结束休息<ArrowUpRight size={15} /><kbd>esc</kbd></button></footer>
+      <footer className="break-footer">
+        <button className="end-break" onClick={() => void leave('snooze')}>再给我 5 分钟</button>
+        <button className="end-break" onClick={() => void leave('end')}>跳过这次<ArrowUpRight size={15} /><kbd>esc</kbd></button>
+      </footer>
     </section>
   </main>
 }

@@ -1,7 +1,7 @@
 import { DEFAULT_SETTINGS, type ReminderSettings } from '../contracts/reminder'
 import { validateSettings } from '../domain/schedule'
 
-export interface SavedPreferences { settings: ReminderSettings; started: boolean; manualPaused: boolean }
+export interface SavedPreferences { settings: ReminderSettings; started: boolean; manualPaused: boolean; pauseUntil: string | null }
 export interface PreferenceStore { read(): SavedPreferences | null; write(value: SavedPreferences): void }
 const KEY = 'remind.preview.v1'
 
@@ -15,12 +15,12 @@ export class BrowserPreferenceStore implements PreferenceStore {
     if (!s || typeof value.started !== 'boolean' || typeof value.manualPaused !== 'boolean' ||
       typeof s.sound !== 'boolean' || typeof s.preReminder !== 'boolean' || typeof s.meetingPause !== 'boolean' ||
       !s.schedule || typeof s.schedule.enabled !== 'boolean' || !Array.isArray(s.schedule.days) ||
-      !Array.isArray(s.schedule.ranges) || validateSettings(s)) throw new Error('Invalid preferences')
-    return { ...value, settings: structuredClone(s) }
+      !Array.isArray(s.schedule.ranges) || validateSettings(s) || (value.pauseUntil != null && typeof value.pauseUntil !== 'string')) throw new Error('Invalid preferences')
+    return { ...value, settings: structuredClone(s), pauseUntil: value.pauseUntil ?? null }
   }
   write(value: SavedPreferences) { localStorage.setItem(KEY, JSON.stringify(value)) }
 }
 
 export function freshPreferences(): SavedPreferences {
-  return { settings: structuredClone(DEFAULT_SETTINGS), started: false, manualPaused: false }
+  return { settings: structuredClone(DEFAULT_SETTINGS), started: false, manualPaused: false, pauseUntil: null }
 }

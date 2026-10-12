@@ -60,11 +60,51 @@ jobs:
           done
           args=(--publish never)
           if [ -n "${CSC_LINK:-}" ]; then
+            # A real Developer ID certificate replaces ad-hoc signing.
             args+=(-c.forceCodeSigning=true)
           elif [ "$RELEASE_PLATFORM" = "mac" ]; then
-            args+=(-c.mac.identity=null)
+            # identity null strips every signature. macOS then reports a
+            # quarantined app as damaged. "-" is an ad-hoc signature, valid
+            # for arm64 and x64, so Gatekeeper shows the unidentified
+            # developer prompt instead. spctl still rejects ad-hoc apps;
+            # that assessment is logged below and must not fail the build.
+            args+=("-c.mac.identity=-" -c.mac.gatekeeperAssess=false)
           fi
           npx electron-builder --"$RELEASE_PLATFORM" "${args[@]}"
+      - name: Verify macOS code signature
+        if: matrix.platform == 'mac'
+        shell: bash
+        run: |
+          mapfile -t apps < <(find release -name 'remind.app' -type d | sort)
+          echo "App bundles:"
+          printf '  %s\n' "${apps[@]}"
+          if [ "${#apps[@]}" -lt 2 ]; then
+            echo "Expected separate arm64 and x64 app bundles."
+            find release -maxdepth 3 -type d
+            exit 1
+          fi
+          verify_app() {
+            local app="$1"
+            echo "== codesign display: $app =="
+            codesign -dv --verbose=4 "$app"
+            echo "== codesign verify: $app =="
+            codesign --verify --deep --strict --verbose=2 "$app"
+            echo "== spctl: $app =="
+            spctl --assess --type execute --verbose=4 "$app" || echo "spctl did not accept this signature. Ad-hoc signatures are recorded here and should produce an unidentified-developer prompt rather than a damaged-app error."
+          }
+          for app in "${apps[@]}"; do verify_app "$app"; done
+          shopt -s nullglob
+          for dmg in release/*.dmg; do
+            echo "== disk image: $dmg =="
+            attach=$(hdiutil attach "$dmg" -nobrowse -readonly)
+            echo "$attach"
+            mount=$(printf '%s\n' "$attach" | awk -F'\t' '/\/Volumes\// { print $NF; exit }')
+            if [ -z "$mount" ]; then echo "Could not mount $dmg"; exit 1; fi
+            app=$(find "$mount" -maxdepth 3 -name 'remind.app' -type d | head -1)
+            if [ -z "$app" ]; then hdiutil detach "$mount" || true; echo "No app in $dmg"; exit 1; fi
+            verify_app "$app"
+            hdiutil detach "$mount"
+          done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: remind-${{ matrix.platform }}
@@ -101,7 +141,9 @@ jobs:
           printf 'Publishing %s files\n' "${#files[@]}"
           notes='Draft macOS (DMG and ZIP) and Windows (NSIS) installers.
 
-          Code signing and notarization run when the repository signing secrets are set. Without those secrets these installers are unsigned.
+          Without Developer ID secrets, the Mac app is ad-hoc signed. Gatekeeper should show the normal unidentified-developer prompt. If macOS still says the app is damaged, right-click remind.app and choose Open, or run: xattr -cr /Applications/remind.app
+
+          A Developer ID certificate and notarization replace that ad-hoc signature when the signing secrets are set.
 
           This release stays a draft until it is published manually. The in-app updater only offers published releases.'
           # This job has no checkout. gh treats a missing git repo as a hard error
