@@ -75,7 +75,11 @@ jobs:
         if: matrix.platform == 'mac'
         shell: bash
         run: |
-          mapfile -t apps < <(find release -name 'remind.app' -type d | sort)
+          # macOS runners ship Bash 3.2, which has no mapfile.
+          apps=()
+          while IFS= read -r app; do
+            [ -n "$app" ] && apps+=("$app")
+          done < <(find release -name 'remind.app' -type d | sort)
           echo "App bundles:"
           printf '  %s\n' "${apps[@]}"
           if [ "${#apps[@]}" -lt 2 ]; then
@@ -100,7 +104,7 @@ jobs:
             echo "$attach"
             mount=$(printf '%s\n' "$attach" | awk -F'\t' '/\/Volumes\// { print $NF; exit }')
             if [ -z "$mount" ]; then echo "Could not mount $dmg"; exit 1; fi
-            app=$(find "$mount" -maxdepth 3 -name 'remind.app' -type d | head -1)
+            app=$(find "$mount" -maxdepth 3 -name 'remind.app' -type d -print -quit)
             if [ -z "$app" ]; then hdiutil detach "$mount" || true; echo "No app in $dmg"; exit 1; fi
             verify_app "$app"
             hdiutil detach "$mount"
