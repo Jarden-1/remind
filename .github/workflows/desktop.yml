@@ -104,8 +104,10 @@ jobs:
           Code signing and notarization run when the repository signing secrets are set. Without those secrets these installers are unsigned.
 
           This release stays a draft until it is published manually. The in-app updater only offers published releases.'
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          # This job has no checkout. gh treats a missing git repo as a hard error
+          # unless --repo is set, even when GH_TOKEN is present.
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$GITHUB_REF_NAME" "${files[@]}" --draft --title "remind $GITHUB_REF_NAME" --notes "$notes"
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" --draft --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY" --title "remind $GITHUB_REF_NAME" --notes "$notes"
           fi
