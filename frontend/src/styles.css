@@ -292,11 +292,17 @@ html[data-desktop] .window-header { -webkit-app-region: drag; }
 html[data-desktop] .window-header button { -webkit-app-region: no-drag; }
 html[data-desktop] .pre-reminder { inset: 0; border-radius: 0; box-shadow: none; }
 html[data-desktop] .toast { bottom: 12px; }
-.software-update h2 { display: flex; align-items: center; }
+.software-update h2 { display: flex; align-items: center; gap: 8px; }
+.update-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .version-label { margin-left: auto; font-size: 11px; font-weight: 400; }
 .update-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .update-row .helper { flex: 1; line-height: 1.6; }
+.update-actions { display: flex; flex-shrink: 0; align-items: center; gap: 8px; }
 .update-row .text-button { flex-shrink: 0; }
+.update-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 25px 14px; padding: 8px 10px 8px 12px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-text); font-size: 12px; }
+.update-banner button { border: 0; background: transparent; color: inherit; font-weight: 600; font-size: 12px; padding: 0; }
+.update-banner button:hover { color: var(--accent-hover); }
+.update-banner button:disabled { opacity: 0.72; }
 .software-update progress { width: 100%; height: 4px; margin-top: 12px; accent-color: var(--accent); }
 .connection-error { height: 100dvh; display: flex; gap: 20px; flex-direction: column; align-items: center; justify-content: center; }
 .spinning { animation: spin 1s linear infinite; }

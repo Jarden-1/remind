@@ -49,7 +49,7 @@ export function App({ client, preview, updates, desktopView, desktopSound = fals
   if (desktopView === 'notice') return snapshot.preReminderVisible ? preReminder : null
   if (desktopView === 'break') return <BreakScreen snapshot={snapshot} client={client} notify={notify} desktop />
   return <>
-    <main className="preview-stage" hidden={breaking && !desktopView}><div className="window-wrap">{settingsOpen ? <Settings settings={snapshot.settings} client={client} updates={updates} onClose={() => setSettingsOpen(false)} notify={notify} playSound={playSound} /> : <Panel snapshot={snapshot} client={client} onSettings={() => setSettingsOpen(true)} notify={notify} />}</div>{preview && <PreviewToolbar controls={preview} snapshot={snapshot} />}</main>
+    <main className="preview-stage" hidden={breaking && !desktopView}><div className="window-wrap">{settingsOpen ? <Settings settings={snapshot.settings} client={client} updates={updates} onClose={() => setSettingsOpen(false)} notify={notify} playSound={playSound} /> : <Panel snapshot={snapshot} client={client} updates={updates} onSettings={() => setSettingsOpen(true)} notify={notify} />}</div>{preview && <PreviewToolbar controls={preview} snapshot={snapshot} />}</main>
     {breaking && !desktopView && <BreakScreen snapshot={snapshot} client={client} notify={notify} />}
     {!desktopView && !breaking && snapshot.preReminderVisible && preReminder}
     {toast && <div className="toast" role="status"><Check size={16} />{toast}</div>}

@@ -1,11 +1,24 @@
+import { useSyncExternalStore } from 'react'
 import { BellOff, BellRing, ChevronDown, Coffee, Pause, Play, Settings2, CalendarDays } from 'lucide-react'
 import type { ReminderClient, ReminderSnapshot } from '../contracts/reminder'
 import { Brand } from '../components/Brand'
 import { TimerReadout } from '../components/TimerReadout'
 import { nextWorkLabel } from '../lib/format'
+import type { UpdateClient } from '../services/desktop-client'
 
-export function Panel({ snapshot: s, client, onSettings, notify }: {
-  snapshot: ReminderSnapshot; client: ReminderClient; onSettings: () => void; notify: (message: string) => void
+function UpdateNotice({ client }: { client: UpdateClient }) {
+  const update = useSyncExternalStore(client.subscribe, client.getUpdateSnapshot)
+  if (update.status !== 'available' && update.status !== 'downloading' && update.status !== 'downloaded' && update.status !== 'installing') return null
+  const browser = update.delivery === 'browser'
+  const busy = update.status === 'downloading' || update.status === 'installing'
+  const action = browser ? 'releases' : update.status === 'downloaded' ? 'install' : 'download'
+  const label = busy ? (update.status === 'installing' ? '安装中…' : `下载中 ${Math.floor(update.progress)}%`) : browser ? '前往下载' : update.status === 'downloaded' ? '重启安装' : '下载更新'
+  const text = browser ? `发现新版本 ${update.version}` : update.status === 'downloaded' || update.status === 'installing' ? `${update.version} 已下载` : `发现新版本 ${update.version}`
+  return <div className="update-banner" role="status"><span>{text}</span><button disabled={busy} onClick={() => void client.update(action)}>{label}</button></div>
+}
+
+export function Panel({ snapshot: s, client, onSettings, notify, updates }: {
+  snapshot: ReminderSnapshot; client: ReminderClient; onSettings: () => void; notify: (message: string) => void; updates?: UpdateClient
 }) {
   const manual = s.pauseReasons.includes('manual')
   const meeting = s.pauseReasons.includes('meeting')
@@ -43,6 +56,7 @@ export function Panel({ snapshot: s, client, onSettings, notify }: {
         <button className="button secondary" disabled={meeting || systemPaused || s.preparingBreak || s.phase === 'break'} onClick={() => run(client.startBreak())}><Coffee size={17} strokeWidth={1.6} />现在休息</button>
       </div>
     </div>
+    {updates && <UpdateNotice client={updates} />}
     <footer className="panel-footer">
       <button aria-label={s.settings.sound ? '关闭休息铃声' : '开启休息铃声'} aria-pressed={s.settings.sound} onClick={() => run(client.updateSettings({ ...s.settings, sound: !s.settings.sound }))}>
         {s.settings.sound ? <BellRing size={14} /> : <BellOff size={14} />}<span>{s.settings.sound ? '铃声开启' : '静音提醒'}</span>

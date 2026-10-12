@@ -4,10 +4,13 @@ export interface Preferences { settings: ReminderSettings; started: boolean; man
 export const commands = ['start', 'pause', 'resume', 'startBreak', 'endBreak', 'dismissPreReminder'] as const
 export type ReminderCommand = typeof commands[number]
 export type DesktopView = 'panel' | 'break' | 'notice'
+export type UpdateDelivery = 'native' | 'browser'
 export interface UpdateSnapshot {
   revision: number
   currentVersion: string
   status: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'current' | 'error' | 'unsupported'
+  /** native: download and install in the app. browser: unsigned Mac builds open the release page instead. */
+  delivery: UpdateDelivery
   version: string | null
   progress: number
   message: string | null

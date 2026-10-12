@@ -1,15 +1,40 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Updates, type UpdateEvent, type UpdatePort } from './updates'
+import { Updates, updateCheckDelayMs, updateCheckIntervalMs, type UpdateEvent, type UpdatePort, type UpdateTimers } from './updates'
 
-function setup(supported = true) {
+function setup(supported = true, delivery: 'native' | 'browser' = 'native') {
   let listener!: (event: UpdateEvent) => void
   const port: UpdatePort = { subscribe: fn => { listener = fn }, check: vi.fn(async () => {}), download: vi.fn(async () => {}), install: vi.fn() }
   let canInstall = true
-  const updates = new Updates(port, '0.1.0', supported, () => canInstall)
+  const updates = new Updates(port, '0.1.0', supported, () => canInstall, undefined, delivery)
   return { updates, port, emit: (event: UpdateEvent) => listener(event), block: () => { canInstall = false } }
 }
+function clock() {
+  let now = 0
+  let nextId = 1
+  const timers = new Map<number, { at: number; every?: number; fn: () => void }>()
+  const api: UpdateTimers = {
+    setTimeout(fn, ms) { const id = nextId++; timers.set(id, { at: now + ms, fn }); return id },
+    clearTimeout(handle) { timers.delete(handle as number) },
+    setInterval(fn, ms) { const id = nextId++; timers.set(id, { at: now + ms, every: ms, fn }); return id },
+    clearInterval(handle) { timers.delete(handle as number) },
+  }
+  return { api, async advance(ms: number) {
+    const target = now + ms
+    for (;;) {
+      const due = [...timers.entries()].filter(([, timer]) => timer.at <= target).sort((a, b) => a[1].at - b[1].at)
+      if (!due.length) break
+      const [id, timer] = due[0]
+      now = timer.at
+      if (timer.every) timer.at += timer.every
+      else timers.delete(id)
+      timer.fn()
+      await Promise.resolve()
+    }
+    now = target
+  } }
+}
 describe('user controlled updates', () => {
-  it('never checks on startup, downloads on availability, or installs on download completion', async () => {
+  it('does not download or install unless the user asks, including right after startup', async () => {
     const { updates, port, emit } = setup()
     expect(port.check).not.toHaveBeenCalled()
     await updates.action('check'); expect(port.check).toHaveBeenCalledOnce()
@@ -20,6 +45,62 @@ describe('user controlled updates', () => {
     emit({ type: 'downloaded', version: '0.2.0' })
     expect(port.install).not.toHaveBeenCalled()
     await updates.action('install'); await updates.action('install'); expect(port.install).toHaveBeenCalledOnce()
+  })
+  it('checks once after startup and then on the six hour interval, without downloading', async () => {
+    const { updates, port, emit } = setup()
+    const time = clock()
+    const found: string[] = []
+    updates.onDiscovered(version => found.push(version))
+    updates.arm(time.api)
+    await time.advance(updateCheckDelayMs - 1)
+    expect(port.check).not.toHaveBeenCalled()
+    await time.advance(1)
+    expect(port.check).toHaveBeenCalledOnce()
+    emit({ type: 'available', version: '0.2.0' })
+    expect(found).toEqual(['0.2.0'])
+    expect(port.download).not.toHaveBeenCalled()
+    await time.advance(updateCheckIntervalMs)
+    expect(port.check).toHaveBeenCalledTimes(2)
+    emit({ type: 'available', version: '0.2.0' })
+    expect(found).toEqual(['0.2.0'])
+  })
+  it('stays idle when a background check finds the current version', async () => {
+    const { updates, port, emit } = setup()
+    const time = clock()
+    vi.mocked(port.check).mockImplementationOnce(async () => { emit({ type: 'current' }) })
+    updates.arm(time.api)
+    await time.advance(updateCheckDelayMs)
+    expect(updates.snapshot.status).toBe('idle')
+    expect(updates.snapshot.message).toBeNull()
+  })
+  it('keeps a failed background check quiet and still allows a later manual check', async () => {
+    const { updates, port, emit } = setup()
+    const time = clock()
+    vi.mocked(port.check).mockRejectedValueOnce(new Error('network unavailable'))
+    updates.arm(time.api)
+    await time.advance(updateCheckDelayMs)
+    expect(updates.snapshot.status).toBe('idle')
+    expect(updates.snapshot.message).toBeNull()
+    await updates.action('check'); emit({ type: 'current' })
+    expect(updates.snapshot.status).toBe('current')
+  })
+  it('ignores a background feed error and does not call the app up to date', async () => {
+    const { updates, port, emit } = setup()
+    const time = clock()
+    const failure = Object.assign(new Error('No published versions on GitHub'), { code: 'ERR_XML_MISSED_ELEMENT' })
+    vi.mocked(port.check).mockImplementationOnce(async () => { emit({ type: 'error', error: failure }); throw failure })
+    updates.arm(time.api)
+    await time.advance(updateCheckDelayMs)
+    expect(updates.snapshot.status).toBe('idle')
+    expect(updates.snapshot.message).toBeNull()
+  })
+  it('opens no in-app download or install path for an unsigned Mac build', async () => {
+    const { updates, port, emit } = setup(true, 'browser')
+    emit({ type: 'available', version: '0.2.0' })
+    expect(updates.snapshot.delivery).toBe('browser')
+    await updates.action('download'); await updates.action('install')
+    expect(port.download).not.toHaveBeenCalled()
+    expect(port.install).not.toHaveBeenCalled()
   })
   it('ignores duplicate checks/downloads and rejects install without a verified downloaded update', async () => {
     const { updates, port, emit } = setup()
@@ -35,7 +116,7 @@ describe('user controlled updates', () => {
     expect(updates.snapshot.status).toBe('downloaded')
     expect(updates.snapshot.message).toBeTruthy()
   })
-  it('reports a failed check as failure, never as up to date, and allows retry', async () => {
+  it('reports a failed manual check as failure, never as up to date, and allows retry', async () => {
     const { updates, port, emit } = setup()
     vi.mocked(port.check).mockRejectedValueOnce(new Error('network unavailable'))
     await updates.action('check'); expect(updates.snapshot.status).toBe('error')
@@ -44,6 +125,9 @@ describe('user controlled updates', () => {
   })
   it('does not contact an update server in a development build', async () => {
     const { updates, port } = setup(false)
+    const time = clock()
+    updates.arm(time.api)
+    await time.advance(updateCheckDelayMs + updateCheckIntervalMs)
     await updates.action('check'); await updates.action('download'); await updates.action('install')
     expect(updates.snapshot.status).toBe('unsupported')
     expect(port.check).not.toHaveBeenCalled(); expect(port.download).not.toHaveBeenCalled(); expect(port.install).not.toHaveBeenCalled()
