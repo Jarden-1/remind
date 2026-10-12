@@ -1,0 +1,41 @@
+{
+  "name": "remind-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A quiet desktop break reminder",
+  "author": "Jarden-1",
+  "license": "UNLICENSED",
+  "main": "out/main/index.js",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "postinstall": "install-electron",
+    "dev": "electron-vite dev",
+    "build": "npm run typecheck && electron-vite build",
+    "typecheck": "tsc -p desktop/tsconfig.json --noEmit && npm run build --workspace frontend",
+    "test": "vitest run --config vitest.config.ts && npm run test --workspace frontend",
+    "pack": "npm run build && electron-builder --dir --publish never",
+    "dist": "npm run build && electron-builder --publish never"
+  },
+  "dependencies": {
+    "electron-log": "5.4.4",
+    "electron-store": "11.0.2",
+    "electron-updater": "6.8.9",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.7",
+    "vitest": "^4.0.18"
+  }
+}

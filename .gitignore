@@ -4,3 +4,7 @@ dist/
 *.local
 coverage/
 *.tsbuildinfo
+
+out/
+release/
+*.log

@@ -4,9 +4,12 @@ import type { ReminderClient, ReminderSettings, Theme } from '../contracts/remin
 import { Toggle } from '../components/Toggle'
 import { validateSettings } from '../domain/schedule'
 import { ScheduleEditor } from './ScheduleEditor'
+import { SoftwareUpdate } from './SoftwareUpdate'
+import type { UpdateClient } from '../services/desktop-client'
 
-export function Settings({ settings, client, onClose, notify, playSound }: {
+export function Settings({ settings, client, onClose, notify, playSound, updates }: {
   settings: ReminderSettings; client: ReminderClient; onClose: () => void; notify: (message: string) => void; playSound: () => void
+  updates?: UpdateClient
 }) {
   const [draft, setDraft] = useState(() => structuredClone(settings))
   const [error, setError] = useState<string | null>(null)
@@ -39,6 +42,7 @@ export function Settings({ settings, client, onClose, notify, playSound }: {
         <div className="future-setting"><div><span className="setting-label">会议自动暂停</span><span className="helper">腾讯会议、飞书会议</span></div><span className="subtle-badge">待接入</span></div>
       </section>
       <section className="settings-section appearance-section"><h2><Sun size={15} />外观</h2><div className="theme-picker">{([{ value: 'system', label: '跟随系统', icon: Monitor }, { value: 'light', label: '浅色', icon: Sun }, { value: 'dark', label: '深色', icon: Moon }] as { value: Theme; label: string; icon: typeof Sun }[]).map(({ value, label, icon: Icon }) => <button key={value} className={draft.theme === value ? 'selected' : ''} aria-pressed={draft.theme === value} onClick={() => update('theme', value)}><Icon size={15} />{label}</button>)}</div></section>
+      {updates && <SoftwareUpdate client={updates} />}
     </div>
     <footer className="settings-footer">{error && <p className="form-error" role="alert">{error}</p>}<div><button className="button secondary" onClick={onClose}>取消</button><button className="button primary" disabled={saving} onClick={() => void save()}><Check size={16} />{saving ? '保存中…' : '保存设置'}</button></div></footer>
   </section>

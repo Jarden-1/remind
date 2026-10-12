@@ -10,10 +10,11 @@ export function Panel({ snapshot: s, client, onSettings, notify }: {
   const manual = s.pauseReasons.includes('manual')
   const meeting = s.pauseReasons.includes('meeting')
   const outside = s.pauseReasons.includes('schedule')
+  const systemPaused = s.pauseReasons.includes('locked') || s.pauseReasons.includes('suspended') || s.pauseReasons.includes('updating')
   const paused = s.pauseReasons.length > 0
   const ready = s.phase === 'ready'
   const upcoming = !paused && !ready && s.remainingSeconds <= 60 && s.settings.workMinutes > 1 && s.settings.preReminder && !s.lastInPeriod
-  const title = meeting ? '会议中' : manual ? '已暂停' : outside ? '时段外' : s.lastInPeriod ? '等待下一时段' : ready ? '未开始' : upcoming ? '即将休息' : '计时中'
+  const title = s.preparingBreak ? '准备休息' : s.phase === 'break' ? '休息中' : systemPaused ? '已暂停' : meeting ? '会议中' : manual ? '已暂停' : outside ? '时段外' : s.lastInPeriod ? '等待下一时段' : ready ? '未开始' : upcoming ? '即将休息' : '计时中'
   const pauseContext = meeting ? `腾讯会议${manual ? ' · 手动暂停' : ''}`
     : outside ? `${nextWorkLabel(s.nextWorkAt)}${manual ? ' · 手动暂停' : ''}` : null
   const primaryLabel = ready ? '开始提醒' : manual ? (meeting || outside ? '取消手动暂停' : '继续提醒') : paused ? '手动暂停' : '暂停提醒'
@@ -39,7 +40,7 @@ export function Panel({ snapshot: s, client, onSettings, notify }: {
         <button className="button primary" onClick={() => run(ready ? client.start() : manual ? client.resume() : client.pause())}>
           {ready || manual ? <Play size={15} fill="currentColor" strokeWidth={1.5} /> : <Pause size={15} fill="currentColor" strokeWidth={1.5} />}{primaryLabel}
         </button>
-        <button className="button secondary" disabled={meeting} onClick={() => run(client.startBreak())}><Coffee size={17} strokeWidth={1.6} />现在休息</button>
+        <button className="button secondary" disabled={meeting || systemPaused || s.preparingBreak || s.phase === 'break'} onClick={() => run(client.startBreak())}><Coffee size={17} strokeWidth={1.6} />现在休息</button>
       </div>
     </div>
     <footer className="panel-footer">
@@ -49,5 +50,6 @@ export function Panel({ snapshot: s, client, onSettings, notify }: {
       <button onClick={onSettings} aria-label="设置工作时段"><CalendarDays size={14} /><span>{s.settings.schedule.enabled ? '工作时段内提醒' : '全天提醒'}</span></button>
     </footer>
     {s.storageError && <p className="storage-warning" role="alert">本地设置无法读取或保存，当前使用临时设置。</p>}
+    {s.displayError && <p className="storage-warning" role="alert">休息窗口未能打开，请重试。</p>}
   </section>
 }

@@ -1,8 +1,8 @@
 # Remind 技术设计
 
-版本：0.2 草案 · 日期：2026-10-12（北京时间）
+版本：0.3 草案 · 日期：2026-10-12（北京时间）
 
-状态：桌面端仍为设计方案，未完成真机验证；已先实现独立前端与模拟适配器，见 [前端开发说明](FRONTEND.md)。产品行为以 [SPEC](SPEC.md) 为准；默认休息 3 分钟且可自定义、提前 1 分钟提醒、支持工作时段已确认；D01–D16 中其余建议待用户审核。
+状态：已接入基础桌面后台和用户主动更新；当前目录、依赖与验证边界见 [桌面后台说明](DESKTOP.md)。本文仍包含后续设计，不能视为所有系统能力均已验收。产品行为以 [SPEC](SPEC.md) 为准；默认休息 3 分钟且可自定义、提前 1 分钟提醒、支持工作时段已确认；D01–D16 中其余建议待用户审核。
 
 ## 1. 技术结论与决策依据
 
@@ -195,6 +195,8 @@ interface ReminderState {
 ### 4.2 休息覆盖
 
 - 一个显示器对应一个无边框、不透明、按 display.bounds 覆盖的窗口。
+- 覆盖窗口关闭原生圆角、阴影和 Windows thickFrame；Mac 启用 enableLargerThanScreen，绕过菜单栏边界裁切。显示后重设并核对窗口及内容边界，直接使用 DIP，不额外乘缩放系数。对应屏幕的坐标变化、旋转、缩放沿用同一流程。[Electron 窗口接口](https://www.electronjs.org/docs/latest/api/base-window)
+- 休息时隐藏小看板；重新激活应用聚焦当前屏幕的休息窗口，避免看板浮到覆盖层上。结束后仅恢复原本打开的看板。
 - 不默认使用 kiosk，也不强制禁止系统切换；目标是明确提醒和可退出。
 - 在 Mac 优先验证“覆盖窗口 + 允许显示于全屏应用所在空间”，避免进入新的系统全屏 Space；若不可行，再比较受控全屏实现。
 - 主进程统一生成 breakId 和休息时钟；各窗口只读同一份状态。
@@ -415,7 +417,7 @@ interface BreakRecord {
 - 分发建议 NSIS 安装包与 DMG，产品名、appId、签名身份和数据目录在首次发布前冻结，避免后续被系统识别为不同应用。
 - 正式公开分发的 Mac 包准备 Developer ID 签名、公证及 stapling；Windows 准备签名与发布者身份。签名不保证立即消除所有 SmartScreen 提示。[Electron 签名指南](https://www.electronjs.org/docs/latest/tutorial/code-signing)
 - 内部无签名测试包明确标识，不作为正式安装体验验收通过。
-- 第一版手动下载安装更新即可；未来自动更新复用 electron-updater，不自建更新协议。更新安装只在无会议、无休息的安全时段经用户操作执行。
+- 用户已确认第一版需要软件更新系统。当前复用 electron-updater 6.8，关闭 autoDownload 和 autoInstallOnAppQuit；用户主动检查、下载、重启安装。没有后台检查或自动安装。GitHub Releases 提供更新元数据，发布草稿经维护者检查后才对用户可见。详细发布配置、签名凭证和真实验收限制见 [桌面后台说明](DESKTOP.md)。
 - 应用运行核心无需联网，更新检查不得改变这一点。
 - 调研时 electron-builder 网站默认含 v27 next 文档；选 v26 时使用对应版本文档，不能混用配置。[v26 Windows 签名文档](https://www.electron.build/v26/docs/features/code-signing/code-signing-win/)
 
@@ -423,6 +425,6 @@ interface BreakRecord {
 
 具体候选、固定 commit、路径及授权见 [开源调研](OPEN_SOURCE_RESEARCH.md)。实际引入代码时登记来源版本、原始路径、改动、许可证和署名；素材单独核对，不因代码宽松授权就认为所有图片音乐均可用。
 
-目前仅完成调研和设计，没有导入第三方实现，也没有确认仓库对外许可证。GPL 项目用于行为研究；如果以后决定复制或 fork，先确定与本项目发布许可策略一致，不能去掉署名改成自己的许可证。
+当前已通过依赖引入 Electron、electron-vite、electron-store、electron-log、electron-updater 和 Zod，保留依赖许可证；未复制调研仓库的业务代码，也没有确认仓库对外许可证。GPL 项目用于行为研究；如果以后决定复制或 fork，先确定与本项目发布许可策略一致，不能去掉署名改成自己的许可证。
 
 设计调整用简短决策记录保留原因。只有新事实、用户审核或验证失败才改动已选方案，避免无依据地反复更换框架。

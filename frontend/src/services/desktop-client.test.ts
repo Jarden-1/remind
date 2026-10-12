@@ -1,0 +1,31 @@
+import { describe, expect, it, vi } from 'vitest'
+import { DesktopClient } from './desktop-client'
+import type { DesktopBridge, DesktopState } from '../../../shared/desktop'
+import { DEFAULT_SETTINGS } from '../contracts/reminder'
+
+function state(revision: number): DesktopState {
+  return {
+    reminder: { revision, phase: 'work', settings: DEFAULT_SETTINGS, remainingSeconds: 2700 - revision, totalSeconds: 2700, pauseReasons: [], preReminderVisible: false, lastInPeriod: false, nextWorkAt: null, storageError: false },
+    update: { revision, status: 'idle', currentVersion: '0.1.0', version: null, progress: 0, message: null },
+  }
+}
+describe('desktop bridge bootstrap', () => {
+  it('does not overwrite a newer pushed state with a delayed initial snapshot', async () => {
+    let receive!: (state: DesktopState) => void
+    let initial!: (state: DesktopState) => void
+    const unsubscribe = vi.fn()
+    const bridge: DesktopBridge = {
+      state: () => new Promise(resolve => { initial = resolve }),
+      subscribe: listener => { receive = listener; return unsubscribe },
+      command: vi.fn(async () => {}), settings: vi.fn(async () => {}), update: vi.fn(async () => {}), panel: vi.fn(async () => {}), ready: vi.fn(async () => {}),
+    }
+    const pending = DesktopClient.connect(bridge)
+    receive(state(3)); initial(state(1))
+    const client = await pending
+    expect(client.getSnapshot().revision).toBe(3)
+    expect(client.getUpdateSnapshot().revision).toBe(3)
+    await client.pause(); expect(bridge.command).toHaveBeenCalledWith('pause')
+    await client.update('download'); expect(bridge.update).toHaveBeenCalledWith('download')
+    client.dispose(); expect(unsubscribe).toHaveBeenCalledOnce()
+  })
+})
