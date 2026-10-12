@@ -1,0 +1,246 @@
+{
+  "research_date": "2026-10-12",
+  "timezone": "Asia/Shanghai",
+  "method": "Default-branch shallow clones; selected files inspected; no upstream applications executed; no source imported. GitHub REST API rate-limited.",
+  "repositories": [
+    {
+      "repository": "hovancik/stretchly",
+      "url": "https://github.com/hovancik/stretchly",
+      "commit": "52929e5369403a2e88269c12648925e83ee4c15e",
+      "commit_time": "2026-10-09T09:55:08+02:00",
+      "commit_time_shanghai": "2026-10-09T15:55:08+08:00",
+      "commit_subject": "Merge pull request #1867 from taekop/fix/tray-number-icon-overflow",
+      "license_observed": "BSD-2-Clause",
+      "license_path": "LICENSE",
+      "inspection_depth": "selected_source_and_tests",
+      "inspected_paths": [
+        "README.md",
+        "package.json",
+        "app/breaksPlanner.js",
+        "app/utils/scheduler.js",
+        "app/utils/displayManager.js",
+        "app/utils/appExclusionsManager.js",
+        "app/main.js",
+        "test/scheduler.js",
+        "test/displayManager.js"
+      ],
+      "executed": false,
+      "imported": false
+    },
+    {
+      "repository": "tom-james-watson/breaktimer-app",
+      "url": "https://github.com/tom-james-watson/breaktimer-app",
+      "commit": "2d672434e9807d11ba91d126eaccfabd6af6931b",
+      "commit_time": "2026-09-29T22:32:57+02:00",
+      "commit_time_shanghai": "2026-09-30T04:32:57+08:00",
+      "commit_subject": "Merge pull request #477 from tom-james-watson/dependabot/npm_and_yarn/electron-43.5.0",
+      "license_observed": "GPL-3.0-or-later (package declaration; GPLv3 text)",
+      "license_path": "LICENSE.md",
+      "inspection_depth": "selected_source_and_tests",
+      "inspected_paths": [
+        "README.md",
+        "package.json",
+        "app/main/lib/windows.ts",
+        "app/main/lib/breaks.ts",
+        "app/main/lib/breaks.test.ts"
+      ],
+      "executed": false,
+      "imported": false
+    },
+    {
+      "repository": "rcaelers/workrave",
+      "url": "https://github.com/rcaelers/workrave",
+      "commit": "cbcb1bb831120451d09903666d745db3573c8b7a",
+      "commit_time": "2026-10-07T20:28:58+02:00",
+      "commit_time_shanghai": "2026-10-08T02:28:58+08:00",
+      "commit_subject": "feat: add local installation options for applets in CMake configuration",
+      "license_observed": "GPL-3.0; per-file exceptions in LICENSES.md",
+      "license_path": "COPYING",
+      "inspection_depth": "metadata_and_structure_only",
+      "inspected_paths": [
+        "README.md",
+        "LICENSES.md"
+      ],
+      "executed": false,
+      "imported": false
+    },
+    {
+      "repository": "jaimaharaj1/BreakTime",
+      "url": "https://github.com/jaimaharaj1/BreakTime",
+      "commit": "bf323864d5b700a8196bf9116c8b15000c66ce72",
+      "commit_time": "2026-05-04T08:58:24+10:00",
+      "commit_time_shanghai": "2026-05-04T06:58:24+08:00",
+      "commit_subject": "fix: ensure reports directory exists before writing report files",
+      "license_observed": "MIT",
+      "license_path": "LICENSE",
+      "inspection_depth": "selected_source",
+      "inspected_paths": [
+        "README.md",
+        "BreakTime.ps1"
+      ],
+      "executed": false,
+      "imported": false
+    },
+    {
+      "repository": "pasrom/meeting-transcriber",
+      "url": "https://github.com/pasrom/meeting-transcriber",
+      "commit": "a4f6af6df2674bc4e18097084a128af469823fab",
+      "commit_time": "2026-10-08T06:48:01+02:00",
+      "commit_time_shanghai": "2026-10-08T12:48:01+08:00",
+      "commit_subject": "test(app): pin who owns the queue snapshot file",
+      "license_observed": "MIT",
+      "license_path": "LICENSE",
+      "inspection_depth": "selected_source_and_tests",
+      "inspected_paths": [
+        "README.md",
+        "app/MeetingTranscriber/Sources/MicInputDetector.swift",
+        "app/MeetingTranscriber/Sources/MeetingPatterns.swift",
+        "app/MeetingTranscriber/Tests/MicInputDetectorTests.swift"
+      ],
+      "executed": false,
+      "imported": false
+    },
+    {
+      "repository": "kenotron-ms/side-huddle",
+      "url": "https://github.com/kenotron-ms/side-huddle",
+      "commit": "93a1185d97ba5534170b94a6d8af17023857ecbd",
+      "commit_time": "2026-05-06T15:49:39-07:00",
+      "commit_time_shanghai": "2026-05-07T06:49:39+08:00",
+      "commit_subject": "docs: add recording HUD + hotkey implementation plan",
+      "license_observed": "MIT",
+      "license_path": "LICENSE",
+      "inspection_depth": "selected_source",
+      "inspected_paths": [
+        "README.md",
+        "Cargo.toml",
+        "crates/side-huddle/src/platform/darwin/detect.rs",
+        "crates/side-huddle/src/apps.rs"
+      ],
+      "executed": false,
+      "imported": false
+    },
+    {
+      "repository": "elitan/meetingbar",
+      "url": "https://github.com/elitan/meetingbar",
+      "commit": "2e646603ab6b022ed58f49daafa781d2a5b6686b",
+      "commit_time": "2026-09-21T13:49:59+02:00",
+      "commit_time_shanghai": "2026-09-21T19:49:59+08:00",
+      "commit_subject": "chore(release): prepare v1.6.0",
+      "license_observed": "not confirmed; no root project LICENSE found",
+      "license_path": null,
+      "inspection_depth": "selected_source_no_reuse_authorization",
+      "inspected_paths": [
+        "README.md",
+        "THIRD_PARTY_NOTICES.md",
+        "MeetingBar/Services/OnlineMeetingMonitor.swift"
+      ],
+      "executed": false,
+      "imported": false
+    },
+    {
+      "repository": "alex8088/electron-vite",
+      "url": "https://github.com/alex8088/electron-vite",
+      "commit": "2ca5e40433bc7c2a851dbe703b974f6de96a2657",
+      "commit_time": "2026-10-11T02:23:37+08:00",
+      "commit_time_shanghai": "2026-10-11T02:23:37+08:00",
+      "commit_subject": "release: v6.0.0-beta.8",
+      "license_observed": "MIT",
+      "license_path": "LICENSE",
+      "inspection_depth": "metadata_and_docs",
+      "inspected_paths": [
+        "README.md",
+        "package.json"
+      ],
+      "executed": false,
+      "imported": false
+    },
+    {
+      "repository": "alex8088/quick-start",
+      "url": "https://github.com/alex8088/quick-start",
+      "commit": "6718c6f485e5d79f93094fe2c76c9ff87ac3669a",
+      "commit_time": "2026-01-06T21:37:47+08:00",
+      "commit_time_shanghai": "2026-01-06T21:37:47+08:00",
+      "commit_subject": "release(create-node-lib): v1.0.14",
+      "license_observed": "MIT",
+      "license_path": "packages/create-electron/LICENSE",
+      "inspection_depth": "selected_template_source",
+      "inspected_paths": [
+        "packages/create-electron/template/react-ts/src/main/index.ts",
+        "packages/create-electron/template/react-ts/src/preload/index.ts"
+      ],
+      "executed": false,
+      "imported": false
+    },
+    {
+      "repository": "sindresorhus/electron-store",
+      "url": "https://github.com/sindresorhus/electron-store",
+      "commit": "5ad69744c22ebe670995707a21d1a89822855b45",
+      "commit_time": "2026-09-20T19:35:48+07:00",
+      "commit_time_shanghai": "2026-09-20T20:35:48+08:00",
+      "commit_subject": "Improve docs",
+      "license_observed": "MIT",
+      "license_path": "license",
+      "inspection_depth": "selected_source_and_docs",
+      "inspected_paths": [
+        "readme.md",
+        "package.json",
+        "index.js"
+      ],
+      "executed": false,
+      "imported": false
+    },
+    {
+      "repository": "megahertz/electron-log",
+      "url": "https://github.com/megahertz/electron-log",
+      "commit": "32be627dcb9279dc1d5b17cd5c67cf3b4e7409f9",
+      "commit_time": "2026-09-27T17:00:44+07:00",
+      "commit_time_shanghai": "2026-09-27T18:00:44+08:00",
+      "commit_subject": "feat(docs): document LogFile, closes #403",
+      "license_observed": "MIT",
+      "license_path": "LICENSE",
+      "inspection_depth": "selected_source_and_docs",
+      "inspected_paths": [
+        "README.md",
+        "package.json",
+        "src/main/index.js"
+      ],
+      "executed": false,
+      "imported": false
+    },
+    {
+      "repository": "sindresorhus/active-win",
+      "url": "https://github.com/sindresorhus/active-win",
+      "commit": "8fbea97ecd6edc42295696c87081bd29432ab461",
+      "commit_time": "2026-03-08T23:39:02+07:00",
+      "commit_time_shanghai": "2026-03-09T00:39:02+08:00",
+      "commit_subject": "9.3.0",
+      "license_observed": "MIT",
+      "license_path": "license",
+      "inspection_depth": "metadata_and_docs",
+      "inspected_paths": [
+        "readme.md",
+        "package.json"
+      ],
+      "executed": false,
+      "imported": false
+    },
+    {
+      "repository": "TonyNa-code/desktop-pet",
+      "url": "https://github.com/TonyNa-code/desktop-pet",
+      "commit": "ce10304a80bdd9785f33e4bf1f43c576481ee71b",
+      "commit_time": "2026-10-11T20:44:40+08:00",
+      "commit_time_shanghai": "2026-10-11T20:44:40+08:00",
+      "commit_subject": "Add opt-in shared memories and gentle companion interactions",
+      "license_observed": "MIT",
+      "license_path": "LICENSE",
+      "inspection_depth": "selected_window_source",
+      "inspected_paths": [
+        "README.md",
+        "package.json",
+        "src/main.js"
+      ],
+      "executed": false,
+      "imported": false
+    }
+  ]
+}
