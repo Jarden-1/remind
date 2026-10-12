@@ -4,6 +4,7 @@ import type { ReminderClient, ReminderSnapshot } from '../contracts/reminder'
 import { Brand } from '../components/Brand'
 import { TimerReadout } from '../components/TimerReadout'
 import { nextWorkLabel } from '../lib/format'
+import { windowControlHandlers } from '../lib/window-control'
 import type { ShellClient, UpdateClient } from '../services/desktop-client'
 
 function UpdateNotice({ client }: { client: UpdateClient }) {
@@ -114,11 +115,11 @@ export function Panel({ snapshot: s, client, onSettings, notify, updates, shell 
     <header className="window-header">
       <Brand />
       <div className="window-controls">
-        <button className="icon-button" aria-label="打开设置" title="设置" onClick={onSettings}><Settings2 size={16} strokeWidth={1.8} /></button>
+        <button className="icon-button" aria-label="打开设置" title="设置" {...windowControlHandlers(onSettings)}><Settings2 size={16} strokeWidth={1.8} /></button>
         {shell && <>
           <span className="window-divider" aria-hidden="true" />
-          <button className="icon-button" aria-label="最小化" title="最小化" onClick={() => void shell.minimize()}><Minus size={16} strokeWidth={1.8} /></button>
-          <button className="icon-button window-close" aria-label="退出 remind" title="退出" onClick={() => void shell.quit()}><X size={16} strokeWidth={1.8} /></button>
+          <button className="icon-button" aria-label="最小化" title="最小化" {...windowControlHandlers(() => void shell.minimize())}><Minus size={16} strokeWidth={1.8} /></button>
+          <button className="icon-button window-close" aria-label="退出 remind" title="退出" {...windowControlHandlers(() => void shell.quit())}><X size={16} strokeWidth={1.8} /></button>
         </>}
       </div>
     </header>

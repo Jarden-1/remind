@@ -12,6 +12,7 @@ import { ReminderEngine } from '../domain/reminder-engine'
 import { PreferencesStore, HistoryStore } from '../services/preferences'
 import { macNativeUpdateSupported } from '../services/code-signature'
 import { Updates, type UpdatePort } from '../services/updates'
+import { shouldHidePanel } from '../domain/panel-window'
 import { trayPresentation } from '../domain/tray-status'
 import { canRegisterLoginItem, classifyInstallLocation, desiredOpenAtLogin, launchedHidden, loginItemQuery, loginItemRequest, loginItemsSettingsUrl, presentLoginItem, type LoginItemReading, type LoginItemState } from '../services/login-item'
 
@@ -72,12 +73,13 @@ function quitApp() {
   updates?.stop()
   app.quit()
 }
-function minimizePanel(window: BrowserWindow) {
-  if (window.isDestroyed()) return
-  window.setAlwaysOnTop(false)
-  window.minimize()
-  // A hidden Dock or skip-taskbar flag can ignore minimize. Hiding still leaves the tray running.
-  if (!window.isMinimized() && window.isVisible()) window.hide()
+function minimizePanel(target: BrowserWindow) {
+  if (target.isDestroyed()) return
+  target.setAlwaysOnTop(false)
+  // Windows can minimize a skip-taskbar window. macOS cannot: the Dock is hidden,
+  // and minimize() may report success while this always-on-top panel stays on screen.
+  if (process.platform === 'win32') target.minimize()
+  if (!target.isDestroyed() && shouldHidePanel(process.platform, target.isVisible())) target.hide()
 }
 function showPanel() {
   if (breakWindows.length && (engine.snapshot.phase === 'break' || engine.snapshot.preparingBreak)) {
