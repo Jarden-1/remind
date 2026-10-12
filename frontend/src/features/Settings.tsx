@@ -5,6 +5,7 @@ import { Toggle } from '../components/Toggle'
 import { validateSettings } from '../domain/schedule'
 import { ScheduleEditor } from './ScheduleEditor'
 import { SoftwareUpdate } from './SoftwareUpdate'
+import { windowControlHandlers } from '../lib/window-control'
 import type { ShellClient, UpdateClient } from '../services/desktop-client'
 
 function LaunchAtLogin({ shell, notify }: { shell: ShellClient; notify: (message: string) => void }) {
@@ -50,11 +51,11 @@ export function Settings({ settings, client, onClose, notify, playSound, updates
   }
   return <section className="app-window settings-window" aria-labelledby="settings-title">
     <header className="window-header settings-header">
-      <button className="icon-button" aria-label="取消修改，返回看板" onClick={onClose}><ArrowLeft size={16} strokeWidth={1.8} /></button>
+      <button className="icon-button" aria-label="取消修改，返回看板" {...windowControlHandlers(onClose)}><ArrowLeft size={16} strokeWidth={1.8} /></button>
       <h1 id="settings-title">提醒设置</h1>
       {shell && <div className="window-controls">
-        <button className="icon-button" aria-label="最小化" title="最小化" onClick={() => void shell.minimize()}><Minus size={16} strokeWidth={1.8} /></button>
-        <button className="icon-button window-close" aria-label="退出 remind" title="退出" onClick={() => void shell.quit()}><X size={16} strokeWidth={1.8} /></button>
+        <button className="icon-button" aria-label="最小化" title="最小化" {...windowControlHandlers(() => void shell.minimize())}><Minus size={16} strokeWidth={1.8} /></button>
+        <button className="icon-button window-close" aria-label="退出 remind" title="退出" {...windowControlHandlers(() => void shell.quit())}><X size={16} strokeWidth={1.8} /></button>
       </div>}
     </header>
     <div className="settings-scroll">

@@ -311,14 +311,21 @@ kbd { font: inherit; border: 1px solid var(--border); border-radius: 4px; paddin
 html[data-desktop] body { background: var(--surface); }
 html[data-desktop] .preview-stage { padding: 0; min-height: 100dvh; align-items: start; }
 html[data-desktop] .window-wrap { width: 100%; }
-html[data-desktop] .app-window { border: 0; border-radius: 0; box-shadow: none; }
+html[data-desktop] .app-window { border: 0; border-radius: 0; box-shadow: none; overflow: visible; }
 html[data-desktop] .panel { min-height: 100dvh; display: flex; flex-direction: column; }
 html[data-desktop] .panel-body { flex: 1; }
 html[data-desktop] .panel-footer { flex-shrink: 0; }
 html[data-desktop] .settings-window { height: 100dvh; max-height: 100dvh; }
 html[data-desktop] .settings-scroll { flex: 1; min-height: 0; }
 html[data-desktop] .window-header { -webkit-app-region: drag; }
-html[data-desktop] .window-header button { -webkit-app-region: no-drag; }
+html[data-desktop] .window-controls,
+html[data-desktop] .window-header button {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+/* A transparent no-drag control is ignored inside a macOS drag region, so clicks never finish and :active sticks. */
+html[data-desktop] .window-controls,
+html[data-desktop] .window-header button { background-color: var(--surface); }
 html[data-desktop] .pre-reminder { inset: 0; border-radius: 0; box-shadow: none; }
 html[data-desktop] .toast { bottom: 12px; }
 .software-update h2 { display: flex; align-items: center; gap: 8px; }
