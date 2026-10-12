@@ -7,9 +7,9 @@ import { BreakScreen } from './features/BreakScreen'
 import { PreviewToolbar } from './features/PreviewToolbar'
 import { Chime } from './lib/sound'
 import type { DesktopView } from '../../shared/desktop'
-import type { UpdateClient } from './services/desktop-client'
+import type { ShellClient, UpdateClient } from './services/desktop-client'
 
-export function App({ client, preview, updates, desktopView, desktopSound = false }: { client: ReminderClient; preview?: PreviewControls; updates?: UpdateClient; desktopView?: DesktopView; desktopSound?: boolean }) {
+export function App({ client, preview, updates, shell, desktopView, desktopSound = false }: { client: ReminderClient; preview?: PreviewControls; updates?: UpdateClient; shell?: ShellClient; desktopView?: DesktopView; desktopSound?: boolean }) {
   const snapshot = useSyncExternalStore(client.subscribe, client.getSnapshot)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [toast, setToast] = useState('')
@@ -49,7 +49,7 @@ export function App({ client, preview, updates, desktopView, desktopSound = fals
   if (desktopView === 'notice') return snapshot.preReminderVisible ? preReminder : null
   if (desktopView === 'break') return <BreakScreen snapshot={snapshot} client={client} notify={notify} desktop />
   return <>
-    <main className="preview-stage" hidden={breaking && !desktopView}><div className="window-wrap">{settingsOpen ? <Settings settings={snapshot.settings} client={client} updates={updates} onClose={() => setSettingsOpen(false)} notify={notify} playSound={playSound} /> : <Panel snapshot={snapshot} client={client} updates={updates} onSettings={() => setSettingsOpen(true)} notify={notify} />}</div>{preview && <PreviewToolbar controls={preview} snapshot={snapshot} />}</main>
+    <main className="preview-stage" hidden={breaking && !desktopView}><div className="window-wrap">{settingsOpen ? <Settings settings={snapshot.settings} client={client} updates={updates} shell={shell} onClose={() => setSettingsOpen(false)} notify={notify} playSound={playSound} /> : <Panel snapshot={snapshot} client={client} updates={updates} shell={shell} onSettings={() => setSettingsOpen(true)} notify={notify} />}</div>{preview && <PreviewToolbar controls={preview} snapshot={snapshot} />}</main>
     {breaking && !desktopView && <BreakScreen snapshot={snapshot} client={client} notify={notify} />}
     {!desktopView && !breaking && snapshot.preReminderVisible && preReminder}
     {toast && <div className="toast" role="status"><Check size={16} />{toast}</div>}

@@ -1,10 +1,10 @@
 import { useSyncExternalStore } from 'react'
-import { BellOff, BellRing, ChevronDown, Coffee, Pause, Play, Settings2, CalendarDays } from 'lucide-react'
+import { BellOff, BellRing, ChevronDown, Coffee, Minus, Pause, Play, RotateCcw, Settings2, CalendarDays } from 'lucide-react'
 import type { ReminderClient, ReminderSnapshot } from '../contracts/reminder'
 import { Brand } from '../components/Brand'
 import { TimerReadout } from '../components/TimerReadout'
 import { nextWorkLabel } from '../lib/format'
-import type { UpdateClient } from '../services/desktop-client'
+import type { ShellClient, UpdateClient } from '../services/desktop-client'
 
 function UpdateNotice({ client }: { client: UpdateClient }) {
   const update = useSyncExternalStore(client.subscribe, client.getUpdateSnapshot)
@@ -17,8 +17,8 @@ function UpdateNotice({ client }: { client: UpdateClient }) {
   return <div className="update-banner" role="status"><span>{text}</span><button disabled={busy} onClick={() => void client.update(action)}>{label}</button></div>
 }
 
-export function Panel({ snapshot: s, client, onSettings, notify, updates }: {
-  snapshot: ReminderSnapshot; client: ReminderClient; onSettings: () => void; notify: (message: string) => void; updates?: UpdateClient
+export function Panel({ snapshot: s, client, onSettings, notify, updates, shell }: {
+  snapshot: ReminderSnapshot; client: ReminderClient; onSettings: () => void; notify: (message: string) => void; updates?: UpdateClient; shell?: ShellClient
 }) {
   const manual = s.pauseReasons.includes('manual')
   const meeting = s.pauseReasons.includes('meeting')
@@ -36,7 +36,10 @@ export function Panel({ snapshot: s, client, onSettings, notify, updates }: {
   return <section className="app-window panel" aria-label="休息提醒看板">
     <header className="window-header">
       <Brand />
-      <button className="icon-button" aria-label="打开设置" title="设置" onClick={onSettings}><Settings2 size={18} strokeWidth={1.6} /></button>
+      <div className="window-controls">
+        {shell && <button className="icon-button" aria-label="最小化" title="最小化" onClick={() => void shell.minimize()}><Minus size={16} /></button>}
+        <button className="icon-button" aria-label="打开设置" title="设置" onClick={onSettings}><Settings2 size={18} strokeWidth={1.6} /></button>
+      </div>
     </header>
     <div className="panel-body">
       <div className="timer-heading">
@@ -54,6 +57,7 @@ export function Panel({ snapshot: s, client, onSettings, notify, updates }: {
           {ready || manual ? <Play size={15} fill="currentColor" strokeWidth={1.5} /> : <Pause size={15} fill="currentColor" strokeWidth={1.5} />}{primaryLabel}
         </button>
         <button className="button secondary" disabled={meeting || systemPaused || s.preparingBreak || s.phase === 'break'} onClick={() => run(client.startBreak())}><Coffee size={17} strokeWidth={1.6} />现在休息</button>
+        <button className="button reset-timer" onClick={() => run(client.resetTimer())}><RotateCcw size={15} />重置计时</button>
       </div>
     </div>
     {updates && <UpdateNotice client={updates} />}
@@ -63,6 +67,7 @@ export function Panel({ snapshot: s, client, onSettings, notify, updates }: {
       </button>
       <button onClick={onSettings} aria-label="设置工作时段"><CalendarDays size={14} /><span>{s.settings.schedule.enabled ? '工作时段内提醒' : '全天提醒'}</span></button>
     </footer>
+    {shell && <button className="quit-app" onClick={() => void shell.quit()}>退出 remind</button>}
     {s.storageError && <p className="storage-warning" role="alert">本地设置无法读取或保存，当前使用临时设置。</p>}
     {s.displayError && <p className="storage-warning" role="alert">休息窗口未能打开，请重试。</p>}
   </section>

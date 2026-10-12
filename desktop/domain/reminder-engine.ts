@@ -4,7 +4,7 @@ import { getScheduleState } from '../../shared/schedule'
 
 export interface Clock { monotonic(): number; now(): Date }
 export type BreakEvent = { version: 1; type: 'break.started' | 'break.ended'; id: string; at: string; outcome?: 'completed' | 'skipped' | 'interrupted' | 'display_failed' }
-export const freshPreferences = (): Preferences => ({ settings: structuredClone(DEFAULT_SETTINGS), started: false, manualPaused: false })
+export const freshPreferences = (): Preferences => ({ settings: structuredClone(DEFAULT_SETTINGS), started: false, manualPaused: false, openAtLogin: false })
 
 /** The main process is the sole clock. Renderers only send intent and display snapshots. */
 export class ReminderEngine {
@@ -99,6 +99,13 @@ export class ReminderEngine {
   command(command: ReminderCommand) {
     this.tick()
     if (command === 'start' && !this.preferences.started && !this.breaking && !this.preparing) { this.preferences.started = true; this.preferences.manualPaused = false; this.reset() }
+    if (command === 'resetTimer') {
+      if (this.preparing || this.breaking) this.interrupt('interrupted')
+      this.preferences.started = true
+      this.preferences.manualPaused = false
+      this.preVisible = false
+      this.reset()
+    }
     if (command === 'pause') { this.preferences.manualPaused = true; this.preVisible = false; if (this.preparing || this.breaking) this.interrupt('interrupted') }
     if (command === 'resume') { this.preferences.started = true; this.preferences.manualPaused = false }
     if (command === 'startBreak') this.requestBreak(true)
@@ -140,4 +147,5 @@ export class ReminderEngine {
     this.markTime(); this.publish()
   }
   setStorageError(value: boolean) { this.storageError = value; this.publish() }
+  setOpenAtLogin(openAtLogin: boolean) { this.preferences.openAtLogin = openAtLogin }
 }

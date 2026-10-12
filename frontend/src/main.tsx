@@ -13,7 +13,7 @@ async function launch() {
     const client = await DesktopClient.connect(window.remind)
     const params = new URLSearchParams(location.search)
     const view = params.get('view') as DesktopView
-    root.render(<App client={client} updates={client} desktopView={view} desktopSound={params.get('sound') === '1'} />)
+    root.render(<App client={client} updates={client} shell={view === 'panel' ? client : undefined} desktopView={view} desktopSound={params.get('sound') === '1'} />)
     if (import.meta.hot) import.meta.hot.dispose(() => client.dispose())
   } else {
     const client = new MockReminderClient(new BrowserPreferenceStore())

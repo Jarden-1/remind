@@ -1,7 +1,7 @@
 import type { ReminderSettings, ReminderSnapshot } from './reminder'
 
-export interface Preferences { settings: ReminderSettings; started: boolean; manualPaused: boolean }
-export const commands = ['start', 'pause', 'resume', 'startBreak', 'endBreak', 'dismissPreReminder'] as const
+export interface Preferences { settings: ReminderSettings; started: boolean; manualPaused: boolean; openAtLogin: boolean }
+export const commands = ['start', 'pause', 'resume', 'resetTimer', 'startBreak', 'endBreak', 'dismissPreReminder'] as const
 export type ReminderCommand = typeof commands[number]
 export type DesktopView = 'panel' | 'break' | 'notice'
 export type UpdateDelivery = 'native' | 'browser'
@@ -15,7 +15,8 @@ export interface UpdateSnapshot {
   progress: number
   message: string | null
 }
-export interface DesktopState { reminder: ReminderSnapshot; update: UpdateSnapshot }
+export interface DesktopState { reminder: ReminderSnapshot; update: UpdateSnapshot; launchAtLogin: boolean }
+export interface LaunchAtLoginResult { openAtLogin: boolean; message: string | null }
 export interface DesktopBridge {
   state(): Promise<DesktopState>
   subscribe(listener: (state: DesktopState) => void): () => void
@@ -24,6 +25,9 @@ export interface DesktopBridge {
   update(action: 'check' | 'download' | 'install' | 'releases'): Promise<void>
   panel(settingsOpen: boolean): Promise<void>
   ready(): Promise<void>
+  minimize(): Promise<void>
+  quit(): Promise<void>
+  setLaunchAtLogin(enabled: boolean): Promise<LaunchAtLoginResult>
 }
 
 declare global { interface Window { remind?: DesktopBridge } }

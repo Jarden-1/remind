@@ -6,7 +6,14 @@ export interface UpdateClient {
   subscribe(listener: () => void): () => void
   update(action: 'check' | 'download' | 'install' | 'releases'): Promise<void>
 }
-export class DesktopClient implements ReminderClient, UpdateClient {
+export interface ShellClient {
+  subscribe(listener: () => void): () => void
+  getLaunchAtLogin(): boolean
+  setLaunchAtLogin(enabled: boolean): Promise<string | null>
+  minimize(): Promise<void>
+  quit(): Promise<void>
+}
+export class DesktopClient implements ReminderClient, UpdateClient, ShellClient {
   private listeners = new Set<() => void>()
   private current!: DesktopState
   private unsubscribe: () => void
@@ -19,9 +26,11 @@ export class DesktopClient implements ReminderClient, UpdateClient {
     catch (error) { client.dispose(); throw error }
   }
   private receive(state: DesktopState) {
+    const stale = this.current && this.current.reminder.revision > state.reminder.revision && this.current.update.revision > state.update.revision
     this.current = {
       reminder: this.current && this.current.reminder.revision > state.reminder.revision ? this.current.reminder : state.reminder,
       update: this.current && this.current.update.revision > state.update.revision ? this.current.update : state.update,
+      launchAtLogin: stale ? this.current.launchAtLogin : state.launchAtLogin,
     }
     for (const listener of this.listeners) listener()
   }
@@ -37,5 +46,10 @@ export class DesktopClient implements ReminderClient, UpdateClient {
   dismissPreReminder = () => this.command('dismissPreReminder')
   updateSettings = (settings: ReminderSettings) => this.bridge.settings(settings)
   update = (action: 'check' | 'download' | 'install' | 'releases') => this.bridge.update(action)
+  getLaunchAtLogin = () => this.current.launchAtLogin
+  setLaunchAtLogin = async (enabled: boolean) => (await this.bridge.setLaunchAtLogin(enabled)).message
+  minimize = () => this.bridge.minimize()
+  quit = () => this.bridge.quit()
+  resetTimer = () => this.command('resetTimer')
   dispose() { this.unsubscribe(); this.listeners.clear() }
 }

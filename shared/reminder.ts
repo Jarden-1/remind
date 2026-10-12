@@ -34,6 +34,7 @@ export interface ReminderClient {
   startBreak(): Promise<void>
   endBreak(): Promise<void>
   dismissPreReminder(): Promise<void>
+  resetTimer(): Promise<void>
   updateSettings(settings: ReminderSettings): Promise<void>
 }
 /** Preview controls deliberately stay outside the production UI contract. */

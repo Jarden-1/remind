@@ -105,6 +105,18 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
   }
   endBreak = async () => { if (this.isBreak) { this.resetCycle(); this.publish() } }
   dismissPreReminder = async () => { this.preVisible = false; this.publish() }
+  resetTimer = async () => {
+    this.tick()
+    if (this.isBreak) this.resetCycle()
+    this.prefs.started = true
+    this.prefs.manualPaused = false
+    this.preSent = false
+    this.preVisible = false
+    this.remainingMs = this.prefs.settings.workMinutes * 60_000
+    this.lastTick = this.clock.monotonic()
+    this.save()
+    this.publish()
+  }
   updateSettings = async (settings: ReminderSettings) => {
     const error = validateSettings(settings)
     if (error) throw new Error(error)
