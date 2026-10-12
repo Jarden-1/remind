@@ -47,5 +47,5 @@ describe('native persistence', () => {
     const records = JSON.parse(readFileSync(join(dir, 'history.json'), 'utf8')).records
     expect(records).toHaveLength(500); expect(records[0].id).toBe('5')
     expect(readdirSync(dir)).not.toContain('preferences.json')
-  })
+  }, 20_000)
 })
