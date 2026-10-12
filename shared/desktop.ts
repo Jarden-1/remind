@@ -1,7 +1,7 @@
 import type { ReminderSettings, ReminderSnapshot } from './reminder'
 
-export interface Preferences { settings: ReminderSettings; started: boolean; manualPaused: boolean; openAtLogin: boolean }
-export const commands = ['start', 'pause', 'resume', 'resetTimer', 'startBreak', 'endBreak', 'dismissPreReminder'] as const
+export interface Preferences { settings: ReminderSettings; started: boolean; manualPaused: boolean; openAtLogin: boolean; pauseUntil: string | null }
+export const commands = ['start', 'pause', 'pause30', 'pause60', 'pauseUntilTomorrow', 'resume', 'resetTimer', 'startBreak', 'endBreak', 'snooze', 'dismissPreReminder'] as const
 export type ReminderCommand = typeof commands[number]
 export type DesktopView = 'panel' | 'break' | 'notice'
 export type UpdateDelivery = 'native' | 'browser'

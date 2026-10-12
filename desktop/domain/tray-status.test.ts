@@ -5,7 +5,7 @@ import { trayPresentation } from './tray-status'
 function snap(partial: Partial<ReminderSnapshot> = {}): ReminderSnapshot {
   return {
     revision: 1, phase: 'work', settings: DEFAULT_SETTINGS,
-    remainingSeconds: 32 * 60 + 18, totalSeconds: 45 * 60, pauseReasons: [],
+    remainingSeconds: 32 * 60 + 18, totalSeconds: 45 * 60, pauseReasons: [], pauseUntil: null,
     preReminderVisible: false, lastInPeriod: false, nextWorkAt: null, storageError: false,
     ...partial,
   }

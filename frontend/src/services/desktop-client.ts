@@ -40,6 +40,7 @@ export class DesktopClient implements ReminderClient, UpdateClient, ShellClient 
   private command(command: ReminderCommand) { return this.bridge.command(command) }
   start = () => this.command('start')
   pause = () => this.command('pause')
+  pauseFor = (duration: '30' | '60' | 'tomorrow' | 'indefinite') => this.command(duration === '30' ? 'pause30' : duration === '60' ? 'pause60' : duration === 'tomorrow' ? 'pauseUntilTomorrow' : 'pause')
   resume = () => this.command('resume')
   startBreak = () => this.command('startBreak')
   endBreak = () => this.command('endBreak')
@@ -51,5 +52,6 @@ export class DesktopClient implements ReminderClient, UpdateClient, ShellClient 
   minimize = () => this.bridge.minimize()
   quit = () => this.bridge.quit()
   resetTimer = () => this.command('resetTimer')
+  snooze = () => this.command('snooze')
   dispose() { this.unsubscribe(); this.listeners.clear() }
 }
