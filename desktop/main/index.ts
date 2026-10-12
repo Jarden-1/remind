@@ -11,6 +11,7 @@ import { settingsSchema } from '../domain/validation'
 import { ReminderEngine } from '../domain/reminder-engine'
 import { PreferencesStore, HistoryStore } from '../services/preferences'
 import { Updates, type UpdatePort } from '../services/updates'
+import { trayPresentation } from '../domain/tray-status'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const releasesUrl = 'https://github.com/Jarden-1/remind/releases'
@@ -243,9 +244,8 @@ function setupTray() {
   tray = new Tray(icon())
   nativeTheme.on('updated', () => tray?.setImage(icon()))
   tray.on('click', () => { if (panel?.isVisible()) panel.hide(); else showPanel() })
-  const rebuild = () => {
+  const rebuildMenu = () => {
     const s = engine.snapshot
-    tray?.setToolTip(`remind · ${s.phase === 'break' ? '休息中' : s.pauseReasons.length ? '已暂停' : s.phase === 'ready' ? '未开始' : '计时中'}`)
     tray?.setContextMenu(Menu.buildFromTemplate([
       { label: '打开看板', click: showPanel },
       { label: s.phase === 'ready' ? '开始提醒' : s.pauseReasons.includes('manual') ? '继续提醒' : '暂停提醒', click: () => { engine.command(s.phase === 'ready' ? 'start' : s.pauseReasons.includes('manual') ? 'resume' : 'pause'); persist() } },
@@ -254,8 +254,23 @@ function setupTray() {
     ]))
   }
   let menuKey = ''
-  engine.subscribe(() => { const key = JSON.stringify([engine.snapshot.phase, engine.snapshot.pauseReasons]); if (key !== menuKey) { menuKey = key; rebuild() } })
-  rebuild()
+  let statusKey = ''
+  const refreshStatus = () => {
+    const { title, tooltip } = trayPresentation(engine.snapshot)
+    const next = `${title}\n${tooltip}`
+    if (next === statusKey) return
+    statusKey = next
+    // setTitle is macOS-only. A leading space separates the template icon from the live text.
+    if (process.platform === 'darwin') tray?.setTitle(title ? ` ${title}` : '')
+    tray?.setToolTip(tooltip)
+  }
+  engine.subscribe(() => {
+    refreshStatus()
+    const key = JSON.stringify([engine.snapshot.phase, engine.snapshot.pauseReasons, Boolean(engine.snapshot.preparingBreak)])
+    if (key !== menuKey) { menuKey = key; rebuildMenu() }
+  })
+  refreshStatus()
+  rebuildMenu()
 }
 // A source-owned monochrome glyph; kept embedded so packaged paths cannot go missing.
 const trayPng = 'iVBORw0KGgoAAAANSUhEUgAAACQAAAAkCAYAAADhAJiYAAAASElEQVR4nO3OuQkAIAAEQXsRBPsvUDvQwF8m2OTgYELMKdzUcQDQ96DSaMkX6AZQbwMCAgICAgICAgICmvgFGgVt7zgA6HlQBauBcB5bXUM4AAAAAElFTkSuQmCC'
