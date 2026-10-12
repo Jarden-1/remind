@@ -13,6 +13,7 @@ import { PreferencesStore, HistoryStore } from '../services/preferences'
 import { macNativeUpdateSupported } from '../services/code-signature'
 import { Updates, type UpdatePort } from '../services/updates'
 import { trayPresentation } from '../domain/tray-status'
+import { displayedOpenAtLogin, launchedHidden, loginItemQuery, loginItemRequest, loginToggleResult, type LoginItemReading } from '../services/login-item'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const releasesUrl = 'https://github.com/Jarden-1/remind/releases'
@@ -32,8 +33,10 @@ const windowDisplays = new Map<number, number>()
 let preparingGeneration: number | null = null
 let tickTimer: ReturnType<typeof setInterval> | undefined
 let recoveryTimer: ReturnType<typeof setTimeout> | undefined
+const panelWidth = 368
+const panelHeight = 520
 
-function state(): DesktopState { return { reminder: engine.snapshot, update: updates.snapshot } }
+function state(): DesktopState { return { reminder: engine.snapshot, update: updates.snapshot, launchAtLogin: engine.getPreferences().openAtLogin } }
 function broadcast() {
   for (const { window, view } of managed.values()) if (!window.isDestroyed() && (window.isVisible() || view === 'break')) window.webContents.send('remind:changed', state())
 }
@@ -61,6 +64,20 @@ function makeWindow(view: DesktopView, options: Electron.BrowserWindowConstructo
   window.on('closed', () => { managed.delete(id); readiness.delete(id) })
   return { window, load: () => window.loadURL(url) }
 }
+function quitApp() {
+  quitting = true
+  clearInterval(tickTimer)
+  clearTimeout(recoveryTimer)
+  updates?.stop()
+  app.quit()
+}
+function minimizePanel(window: BrowserWindow) {
+  if (window.isDestroyed()) return
+  window.setAlwaysOnTop(false)
+  window.minimize()
+  // A hidden Dock or skip-taskbar flag can ignore minimize. Hiding still leaves the tray running.
+  if (!window.isMinimized() && window.isVisible()) window.hide()
+}
 function showPanel() {
   if (breakWindows.length && (engine.snapshot.phase === 'break' || engine.snapshot.preparingBreak)) {
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
@@ -69,7 +86,7 @@ function showPanel() {
     return
   }
   if (!panel || panel.isDestroyed()) {
-    const created = makeWindow('panel', { width: 368, height: 420, resizable: false, frame: false, skipTaskbar: true, alwaysOnTop: true })
+    const created = makeWindow('panel', { width: panelWidth, height: panelHeight, resizable: false, frame: false, minimizable: true, skipTaskbar: true, alwaysOnTop: true })
     panel = created.window
     panel.on('close', event => { if (!quitting) { event.preventDefault(); panel?.hide() } })
     void created.load().then(() => placePanel()).catch(error => log.error('Panel failed to load', error))
@@ -77,6 +94,8 @@ function showPanel() {
 }
 function placePanel() {
   if (!panel || panel.isDestroyed()) return
+  if (panel.isMinimized()) panel.restore()
+  panel.setAlwaysOnTop(true)
   const anchor = tray?.getBounds()
   const point = anchor && anchor.width > 0 ? { x: anchor.x + anchor.width / 2, y: anchor.y + anchor.height / 2 } : screen.getCursorScreenPoint()
   const area = screen.getDisplayNearestPoint(point).workArea
@@ -212,7 +231,7 @@ function setupIpc() {
     if (entry.view === 'notice' && command !== 'dismissPreReminder') throw new Error('不允许的操作')
     if (entry.view === 'break' && command !== 'endBreak') throw new Error('不允许的操作')
     engine.command(command)
-    if (['start', 'pause', 'resume'].includes(command)) persist()
+    if (['start', 'pause', 'resume', 'resetTimer'].includes(command)) persist()
   })
   ipcMain.handle('remind:settings', (event, input: unknown) => {
     trusted(event, ['panel'])
@@ -231,10 +250,32 @@ function setupIpc() {
     const entry = trusted(event, ['panel'])
     const open = z.boolean().parse(input)
     const area = screen.getDisplayMatching(entry.window.getBounds()).workArea
-    entry.window.setSize(368, open ? Math.min(740, area.height - 24) : 420)
+    entry.window.setSize(panelWidth, open ? Math.min(740, area.height - 24) : panelHeight)
     placePanel()
   })
+  ipcMain.handle('remind:window', (event, input: unknown) => {
+    const entry = trusted(event, ['panel'])
+    const action = z.enum(['minimize', 'quit']).parse(input)
+    if (action === 'minimize') minimizePanel(entry.window)
+    else quitApp()
+  })
+  ipcMain.handle('remind:launch-at-login', (event, input: unknown) => {
+    trusted(event, ['panel'])
+    const enabled = z.boolean().parse(input)
+    if (process.platform !== 'darwin' && process.platform !== 'win32') return { openAtLogin: false, message: '当前系统不支持开机自启动' }
+    app.setLoginItemSettings(loginItemRequest(enabled))
+    const result = loginToggleResult(enabled, readLoginItem())
+    engine.setOpenAtLogin(result.openAtLogin)
+    try { preferences.write(engine.getPreferences()); engine.setStorageError(false) }
+    catch (error) { engine.setStorageError(true); log.error(error); throw new Error('开机自启动状态无法保存，请重试') }
+    broadcast()
+    return result
+  })
   ipcMain.handle('remind:ready', event => { trusted(event); readiness.get(event.sender.id)?.(); readiness.delete(event.sender.id) })
+}
+function readLoginItem(): LoginItemReading {
+  if (process.platform !== 'darwin' && process.platform !== 'win32') return { openAtLogin: false }
+  return app.getLoginItemSettings(loginItemQuery())
 }
 function setupTray() {
   const icon = () => {
@@ -251,7 +292,8 @@ function setupTray() {
       { label: '打开看板', click: showPanel },
       { label: s.phase === 'ready' ? '开始提醒' : s.pauseReasons.includes('manual') ? '继续提醒' : '暂停提醒', click: () => { engine.command(s.phase === 'ready' ? 'start' : s.pauseReasons.includes('manual') ? 'resume' : 'pause'); persist() } },
       { label: '现在休息', enabled: !s.pauseReasons.some(reason => ['locked', 'suspended', 'meeting', 'updating'].includes(reason)) && s.phase !== 'break' && !s.preparingBreak, click: () => engine.command('startBreak') },
-      { type: 'separator' }, { label: '退出 remind', click: () => { quitting = true; app.quit() } },
+      { label: '重置计时', click: () => { engine.command('resetTimer'); persist() } },
+      { type: 'separator' }, { label: '退出 remind', click: quitApp },
     ]))
   }
   let menuKey = ''
@@ -289,7 +331,14 @@ else {
     Menu.setApplicationMenu(null)
     if (process.platform === 'darwin') app.dock?.hide()
     preferences = new PreferencesStore(app.getPath('userData'))
-    engine = new ReminderEngine({ monotonic: () => performance.now(), now: () => new Date() }, preferences.initial)
+    const loginReading = readLoginItem()
+    const openAtLogin = displayedOpenAtLogin(loginReading)
+    const initial = { ...preferences.initial, openAtLogin }
+    if (preferences.initial.openAtLogin !== openAtLogin) {
+      try { preferences.write(initial) } catch (error) { log.error('Cannot sync login item', error) }
+    }
+    const openedHidden = launchedHidden(process.argv, loginReading)
+    engine = new ReminderEngine({ monotonic: () => performance.now(), now: () => new Date() }, initial)
     engine.setStorageError(preferences.recovered)
     const history = new HistoryStore(app.getPath('userData'))
     engine.onEvent(event => { try { history.append(event) } catch (error) { log.error('Cannot save break history', error) } })
@@ -340,6 +389,6 @@ else {
     const displaysChanged = () => { refreshBreakDisplays(); if (panel?.isVisible()) placePanel() }
     screen.on('display-added', displaysChanged); screen.on('display-removed', displaysChanged); screen.on('display-metrics-changed', displaysChanged)
     tickTimer = setInterval(() => engine.tick(), 250)
-    showPanel()
+    if (!openedHidden) showPanel()
   }).catch(error => { log.error('Startup failed', error); dialog.showErrorBox('remind 无法启动', '请检查本地数据目录是否可写，然后重试。'); quitting = true; app.quit() })
 }

@@ -15,4 +15,9 @@ export const settingsSchema = z.object({
   if (message) context.addIssue({ code: 'custom', message })
 })
 
-export const preferencesSchema = z.object({ settings: settingsSchema, started: z.boolean(), manualPaused: z.boolean() })
+export const preferencesSchema = z.object({
+  settings: settingsSchema,
+  started: z.boolean(),
+  manualPaused: z.boolean(),
+  openAtLogin: z.boolean().default(false),
+})

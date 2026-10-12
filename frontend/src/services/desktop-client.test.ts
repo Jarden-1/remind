@@ -7,6 +7,7 @@ function state(revision: number): DesktopState {
   return {
     reminder: { revision, phase: 'work', settings: DEFAULT_SETTINGS, remainingSeconds: 2700 - revision, totalSeconds: 2700, pauseReasons: [], preReminderVisible: false, lastInPeriod: false, nextWorkAt: null, storageError: false },
     update: { revision, status: 'idle', delivery: 'native', currentVersion: '0.1.0', version: null, progress: 0, message: null },
+    launchAtLogin: revision > 1,
   }
 }
 describe('desktop bridge bootstrap', () => {
@@ -18,13 +19,16 @@ describe('desktop bridge bootstrap', () => {
       state: () => new Promise(resolve => { initial = resolve }),
       subscribe: listener => { receive = listener; return unsubscribe },
       command: vi.fn(async () => {}), settings: vi.fn(async () => {}), update: vi.fn(async () => {}), panel: vi.fn(async () => {}), ready: vi.fn(async () => {}),
+      minimize: vi.fn(async () => {}), quit: vi.fn(async () => {}), setLaunchAtLogin: vi.fn(async () => ({ openAtLogin: true, message: null })),
     }
     const pending = DesktopClient.connect(bridge)
     receive(state(3)); initial(state(1))
     const client = await pending
     expect(client.getSnapshot().revision).toBe(3)
     expect(client.getUpdateSnapshot().revision).toBe(3)
+    expect(client.getLaunchAtLogin()).toBe(true)
     await client.pause(); expect(bridge.command).toHaveBeenCalledWith('pause')
+    await client.minimize(); expect(bridge.minimize).toHaveBeenCalledOnce()
     await client.update('download'); expect(bridge.update).toHaveBeenCalledWith('download')
     client.dispose(); expect(unsubscribe).toHaveBeenCalledOnce()
   })

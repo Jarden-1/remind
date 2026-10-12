@@ -91,8 +91,14 @@ p, h1, h2 { margin: 0; }
 .rhythm-controls svg { margin-left: 2px; }
 .rest-dot { display: none; }
 .pause-context { color: var(--muted); font-size: 11px; line-height: 1.7; margin-top: 14px; }
+.window-controls { display: flex; align-items: center; gap: 2px; }
 .timer-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 24px; }
 .button { display: inline-flex; justify-content: center; align-items: center; gap: 8px; border: 1px solid transparent; border-radius: 8px; min-height: 43px; padding: 0 12px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.button.reset-timer { grid-column: 1 / -1; min-height: 36px; background: transparent; border-color: var(--border); color: var(--ink); font-weight: 400; }
+.button.reset-timer:hover:not(:disabled) { background: var(--subtle); border-color: var(--rail); }
+.quit-app { display: flex; align-items: center; justify-content: center; width: calc(100% - 50px); margin: 4px 25px 16px; min-height: 36px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--ink); font-size: 13px; }
+.quit-app:hover { color: var(--danger); border-color: var(--danger); }
+.settings-quit { width: 100%; margin: 14px 0 8px; }
 .primary { background: var(--button); color: var(--button-ink); }
 .primary:hover:not(:disabled) { background: color-mix(in oklch, var(--button) 85%, var(--muted)); }
 .secondary { background: var(--surface); border-color: var(--border); color: var(--ink); }

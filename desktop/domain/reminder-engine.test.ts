@@ -41,6 +41,28 @@ describe('native reminder engine', () => {
     expect(engine.snapshot.remainingSeconds).toBe(2700)
     expect(events.map(event => [event.type, event.outcome])).toEqual([['break.started', undefined], ['break.ended', 'completed']])
   })
+  it('restarts the countdown at the full interval and keeps it running', () => {
+    const { engine, advance } = setup()
+    engine.command('start'); advance(5 * 60_000); engine.command('pause')
+    engine.command('resetTimer')
+    expect(engine.snapshot.phase).toBe('work')
+    expect(engine.snapshot.pauseReasons).toEqual([])
+    expect(engine.snapshot.remainingSeconds).toBe(2700)
+    advance(60_000)
+    expect(engine.snapshot.remainingSeconds).toBe(2640)
+  })
+  it('ends an active break when the timer is reset and leaves a system pause in place', () => {
+    const { engine, advance } = setup()
+    engine.command('startBreak'); engine.confirmBreak(engine.generation)
+    engine.command('resetTimer')
+    expect(engine.snapshot.phase).toBe('work')
+    expect(engine.snapshot.remainingSeconds).toBe(2700)
+    engine.setSystemPause('locked', true)
+    engine.command('resetTimer')
+    expect(engine.snapshot.pauseReasons).toEqual(['locked'])
+    advance(10_000)
+    expect(engine.snapshot.remainingSeconds).toBe(2700)
+  })
   it('does not pre-remind for a one minute interval', () => {
     const prefs = freshPreferences(); prefs.settings.workMinutes = 1
     const { engine, advance } = setup(prefs)
