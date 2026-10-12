@@ -10,6 +10,7 @@ import { commands, type DesktopView, type DesktopState } from '../../shared/desk
 import { settingsSchema } from '../domain/validation'
 import { ReminderEngine } from '../domain/reminder-engine'
 import { PreferencesStore, HistoryStore } from '../services/preferences'
+import { macNativeUpdateSupported } from '../services/code-signature'
 import { Updates, type UpdatePort } from '../services/updates'
 import { trayPresentation } from '../domain/tray-status'
 
@@ -21,7 +22,7 @@ let panel: BrowserWindow | null = null
 let notice: BrowserWindow | null = null
 let tray: Tray | null = null
 let engine: ReminderEngine
-let updates: Updates
+let updates!: Updates
 let preferences: PreferencesStore
 const managed = new Map<number, { window: BrowserWindow; view: DesktopView; url: string }>()
 const readiness = new Map<number, () => void>()
@@ -282,8 +283,8 @@ else {
   app.on('second-instance', () => { if (engine) showPanel() })
   app.on('window-all-closed', () => {})
   app.on('activate', () => { if (engine) showPanel() })
-  app.on('before-quit', () => { quitting = true; clearInterval(tickTimer); clearTimeout(recoveryTimer) })
-  void app.whenReady().then(() => {
+  app.on('before-quit', () => { quitting = true; clearInterval(tickTimer); clearTimeout(recoveryTimer); updates?.stop() })
+  void app.whenReady().then(async () => {
     log.initialize(); log.transports.file.maxSize = 1024 * 1024
     Menu.setApplicationMenu(null)
     if (process.platform === 'darwin') app.dock?.hide()
@@ -310,10 +311,20 @@ else {
       async download() { await autoUpdater.downloadUpdate() },
       install() { autoUpdater.quitAndInstall(false, true) },
     }
-    updates = new Updates(port, app.getVersion(), app.isPackaged && existsSync(join(process.resourcesPath, 'app-update.yml')) && ['darwin', 'win32'].includes(process.platform), () => !engine.snapshot.preparingBreak && engine.snapshot.phase !== 'break' && !engine.snapshot.pauseReasons.some(reason => ['meeting', 'locked', 'suspended', 'updating'].includes(reason)), app.isPackaged ? '此测试包不支持在线更新' : undefined)
+    const packagedUpdates = app.isPackaged && existsSync(join(process.resourcesPath, 'app-update.yml')) && (process.platform === 'darwin' || process.platform === 'win32')
+    const delivery = packagedUpdates && process.platform === 'darwin' && !await macNativeUpdateSupported() ? 'browser' : 'native'
+    updates = new Updates(port, app.getVersion(), packagedUpdates, () => !engine.snapshot.preparingBreak && engine.snapshot.phase !== 'break' && !engine.snapshot.pauseReasons.some(reason => ['meeting', 'locked', 'suspended', 'updating'].includes(reason)), app.isPackaged ? '此测试包不支持在线更新' : undefined, delivery)
+    updates.onDiscovered(version => {
+      if (quitting || !Notification.isSupported()) return
+      const browser = updates?.snapshot.delivery === 'browser'
+      const notice = new Notification({ title: '发现新版本', body: browser ? `remind ${version} 已发布，点击打开下载页面` : `remind ${version} 已发布，可在看板中下载并安装`, silent: true })
+      notice.on('click', () => { if (browser) void shell.openExternal(releasesUrl); else showPanel() })
+      notice.show()
+    })
+    updates.arm()
     setupIpc(); setupTray()
     engine.subscribe(() => { broadcast(); syncWindows() })
-    updates.subscribe(() => { engine.setSystemPause('updating', updates.snapshot.status === 'installing'); broadcast() })
+    updates.subscribe(() => { engine.setSystemPause('updating', updates?.snapshot.status === 'installing'); broadcast() })
     nativeAutoUpdater.on('before-quit-for-update', () => { quitting = true })
     powerMonitor.on('suspend', () => { clearTimeout(recoveryTimer); engine.setSystemPause('suspended', true) })
     powerMonitor.on('resume', () => {

@@ -417,7 +417,7 @@ interface BreakRecord {
 - 分发建议 NSIS 安装包与 DMG，产品名、appId、签名身份和数据目录在首次发布前冻结，避免后续被系统识别为不同应用。
 - 正式公开分发的 Mac 包准备 Developer ID 签名、公证及 stapling；Windows 准备签名与发布者身份。签名不保证立即消除所有 SmartScreen 提示。[Electron 签名指南](https://www.electronjs.org/docs/latest/tutorial/code-signing)
 - 内部无签名测试包明确标识，不作为正式安装体验验收通过。
-- 用户已确认第一版需要软件更新系统。当前复用 electron-updater 6.8，关闭 autoDownload 和 autoInstallOnAppQuit；用户主动检查、下载、重启安装。没有后台检查或自动安装。GitHub Releases 提供更新元数据，发布草稿经维护者检查后才对用户可见。详细发布配置、签名凭证和真实验收限制见 [桌面后台说明](DESKTOP.md)。
+- 用户已确认第一版需要软件更新系统。当前复用 electron-updater 6.8，关闭 autoDownload 和 autoInstallOnAppQuit。启动后和每 6 小时检查已发布版本；下载和安装仍要用户确认。未签名 Mac 包改为打开发布页。GitHub Releases 提供更新元数据，发布草稿经维护者检查后才对用户可见。详细发布配置、签名凭证和真实验收限制见 [桌面后台说明](DESKTOP.md)。
 - 应用运行核心无需联网，更新检查不得改变这一点。
 - 调研时 electron-builder 网站默认含 v27 next 文档；选 v26 时使用对应版本文档，不能混用配置。[v26 Windows 签名文档](https://www.electron.build/v26/docs/features/code-signing/code-signing-win/)
 

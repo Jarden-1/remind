@@ -16,7 +16,7 @@ desktop/
   domain/reminder-engine.ts       独立计时核心、暂停原因、休息事件
   domain/validation.ts            主进程入口的 Zod 运行时校验
   services/preferences.ts        electron-store 设置及有限记录
-  services/updates.ts            用户主动更新状态机
+  services/updates.ts            更新检查、下载与安装状态机
   main/index.ts                  托盘、窗口、电源事件、IPC、更新库适配
   preload/index.ts               沙箱桥接，仅暴露固定操作
 
@@ -60,26 +60,34 @@ electron-store 提供原子写入。设置额外保存 schemaVersion 并用 Zod 
 
 渲染进程开启 sandbox、contextIsolation，禁用 Node 集成。正式页面 CSP 禁止远程连接和脚本；新窗口、导航、webview 与权限请求被拒绝。IPC 验证受管理窗口、主 frame、完整加载 URL、视图权限和参数结构。更新入口只允许固定动作，手动下载只打开固定的 GitHub Releases 页面。
 
-## 2. 用户主动更新
+## 2. 软件更新
 
 使用成熟的 electron-updater；不自建下载、差分更新或安装器。
 
 ```text
-检查更新 → 有新版本 → 用户点击下载 → 下载与校验
-                                   ↓
-                      用户点击重启安装 → 原生安装器
+启动 15 秒后 / 每 6 小时 / 用户点击检查
+        ↓
+   已发布的更高版本？ ——否→ 自动检查保持安静；手动检查显示结果
+        ↓ 是
+ 静音系统通知 + 看板和设置提示
+        ↓
+ Windows，或已签名的 Mac：用户点击下载 → 校验 → 用户点击重启安装
+ 未签名的 Mac：用户点击后打开 GitHub Releases 下载页
 ```
 
 关键规则：
 
-- `autoDownload = false`、`autoInstallOnAppQuit = false`；没有启动检查、周期检查或 `checkForUpdatesAndNotify()`。
-- 只由用户触发检查；发现新版本后等待用户点击下载，显示百分比。下载完成仍等待用户点击重启安装。
-- 休息、准备覆盖、锁屏／休眠期间拒绝安装，保留下载结果。安装期间暂停提醒；用户手动暂停意图保留。
+- `autoDownload = false`、`autoInstallOnAppQuit = false`。不调用 `checkForUpdatesAndNotify()`，以免库自己下载或安装。
+- 正式包在启动约 15 秒后检查一次，之后每 6 小时检查一次。自动检查失败不改界面状态，也不显示成“已是最新版本”。
+- 发现新版本只通知，不下载。同一版本不重复通知。设置中的“检查更新”仍然可用，手动检查失败会显示原因并可重试。
+- Windows 走应用内下载和安装。下载显示百分比，下载完成后仍等待用户点击重启安装。
+- 未签名的 macOS 包不能通过 Squirrel.Mac 完成应用内安装。启动时用 `codesign` 查看是否带有 Developer ID Application 签名；没有时，新版本提示改为打开固定的 GitHub Releases 页面，不调用应用内下载或安装。已签名的 Mac 包仍使用应用内流程。
+- 休息、准备覆盖、锁屏、休眠、会议和更新安装期间拒绝安装，保留已下载结果。安装期间暂停提醒；用户手动暂停意图保留。
 - 重复点击检查、下载、安装不会重复发起同一操作。失败显示可重试状态，不能误报“最新版本”；可转到公开版本页手动下载。
-- 不允许预发布版本或降级。更新源固定为公开的 `Jarden-1/remind` Releases，客户端不包含 GitHub token。
+- 不允许预发布版本或降级。更新源固定为公开的 `Jarden-1/remind` Releases，客户端不包含 GitHub token。自动检查只看已发布版本，看不到草稿。
 - 更新库校验下载哈希，正式包使用原生签名校验；不提供关闭签名验证的开关。
-- 开发模式及缺少更新配置的目录测试包只提供“查看版本”。安装包需有 `app-update.yml`，发布端需有 `latest.yml`／`latest-mac.yml` 及对应产物。
-- macOS 更新需要签名，且发布 ZIP；只有 DMG 不足以支持更新。当前机器没有 Developer ID 签名，故本地测试包不能代表签名更新已验收。[electron-builder v26 更新说明](https://www.electron.build/v26/docs/features/auto-update/)
+- 开发模式及缺少更新配置的目录测试包只提供“查看版本”，也不会发起自动检查。安装包需有 `app-update.yml`，发布端需有 `latest.yml`／`latest-mac.yml` 及对应产物。
+- macOS 应用内更新需要签名，且发布 ZIP；只有 DMG 不足以支持更新。[electron-builder v26 更新说明](https://www.electron.build/v26/docs/features/auto-update/)
 
 实际打包页面已核对更新检查，缺少发布版本时显示“暂时没有可用的发布版本”。截图：[更新入口](previews/software-update.jpg)、[完整设置窗口](previews/desktop-settings.jpg)。
 

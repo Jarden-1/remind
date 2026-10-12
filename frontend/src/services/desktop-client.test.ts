@@ -6,7 +6,7 @@ import { DEFAULT_SETTINGS } from '../contracts/reminder'
 function state(revision: number): DesktopState {
   return {
     reminder: { revision, phase: 'work', settings: DEFAULT_SETTINGS, remainingSeconds: 2700 - revision, totalSeconds: 2700, pauseReasons: [], preReminderVisible: false, lastInPeriod: false, nextWorkAt: null, storageError: false },
-    update: { revision, status: 'idle', currentVersion: '0.1.0', version: null, progress: 0, message: null },
+    update: { revision, status: 'idle', delivery: 'native', currentVersion: '0.1.0', version: null, progress: 0, message: null },
   }
 }
 describe('desktop bridge bootstrap', () => {
