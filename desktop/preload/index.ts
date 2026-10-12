@@ -16,5 +16,7 @@ const bridge: DesktopBridge = {
   minimize: () => ipcRenderer.invoke('remind:window', 'minimize'),
   quit: () => ipcRenderer.invoke('remind:window', 'quit'),
   setLaunchAtLogin: enabled => ipcRenderer.invoke('remind:launch-at-login', enabled),
+  refreshLaunchAtLogin: () => ipcRenderer.invoke('remind:launch-at-login-refresh'),
+  openLoginItemsSettings: () => ipcRenderer.invoke('remind:login-item-settings'),
 }
 contextBridge.exposeInMainWorld('remind', bridge)

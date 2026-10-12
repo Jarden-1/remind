@@ -4,7 +4,7 @@ import { getScheduleState } from '../../shared/schedule'
 
 export interface Clock { monotonic(): number; now(): Date }
 export type BreakEvent = { version: 1; type: 'break.started' | 'break.ended'; id: string; at: string; outcome?: 'completed' | 'skipped' | 'interrupted' | 'display_failed' }
-export const freshPreferences = (): Preferences => ({ settings: structuredClone(DEFAULT_SETTINGS), started: false, manualPaused: false, openAtLogin: false, pauseUntil: null })
+export const freshPreferences = (): Preferences => ({ settings: structuredClone(DEFAULT_SETTINGS), started: false, manualPaused: false, openAtLogin: true, loginItemChosen: false, pauseUntil: null })
 
 /** The main process is the sole clock. Renderers only send intent and display snapshots. */
 export class ReminderEngine {
@@ -184,5 +184,5 @@ export class ReminderEngine {
     this.markTime(); this.publish()
   }
   setStorageError(value: boolean) { this.storageError = value; this.publish() }
-  setOpenAtLogin(openAtLogin: boolean) { this.preferences.openAtLogin = openAtLogin }
+  setLoginItem(openAtLogin: boolean, chosen: boolean) { this.preferences.openAtLogin = openAtLogin; this.preferences.loginItemChosen = chosen }
 }

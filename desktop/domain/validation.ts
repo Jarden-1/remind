@@ -19,6 +19,7 @@ export const preferencesSchema = z.object({
   settings: settingsSchema,
   started: z.boolean(),
   manualPaused: z.boolean(),
-  openAtLogin: z.boolean().default(false),
+  openAtLogin: z.boolean().default(true),
+  loginItemChosen: z.boolean().default(false),
   pauseUntil: z.string().datetime({ offset: true }).nullable().default(null),
 })

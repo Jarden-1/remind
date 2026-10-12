@@ -38,8 +38,10 @@ frontend/src/services/
 
 ### 窗口与退出
 
-- 单实例；重复启动打开已有看板。菜单栏／托盘支持开始、暂停、继续、立即休息、重置计时和退出。看板是无边框窗口，标题栏提供最小化；看板和设置里的“退出 remind”与托盘退出相同，会清掉计时并结束进程。
-- 开机自启动默认关闭，使用 `app.setLoginItemSettings`。开关以系统返回值为准。登录启动时不打开看板，只留在菜单栏或托盘。
+- 单实例；重复启动打开已有看板。菜单栏／托盘支持开始、暂停、继续、立即休息、重置计时和退出。看板是无边框窗口。标题栏右侧依次是设置、最小化“−”和退出“×”；“×”与托盘退出相同，会清掉计时并结束进程。最小化只收起看板。
+- 开机自启动默认打开。偏好里用 `loginItemChosen` 区分“从未设置”和“用户改过”。没有这个标记时，即使旧文件里 `openAtLogin` 为 false，升级后也会登记为打开。用户拨动开关后写入 `loginItemChosen`，之后尊重该选择。自动登记失败不会把选择标成已确认，移到“应用程序”后下次启动会再试。
+- macOS 使用 `SMAppService`（`type: 'mainAppService'`），只在应用位于 `/Applications` 时调用 `setLoginItemSettings`。开关以 `getLoginItemSettings().status` 为准：`enabled` 为开；`requires-approval` 保持开，设置里提示到“系统设置 → 通用 → 登录项”，按钮打开 `x-apple.systempreferences:com.apple.LoginItems-Settings.extension`；`not-registered` / `not-found` 显示为关。窗口重新获得焦点时只重新读取，不重复登记。从 DMG（`/Volumes`）或 App Translocation 路径运行时不登记，并提示移到“应用程序”。
+- Windows 仍通过 `args: ['--hidden']` 和 `enabled` 登记。Electron 44 已移除 `openAsHidden`。macOS 登录启动靠 `wasOpenedAtLogin`，Windows 靠 `--hidden`，两种都会在不打开看板的情况下留在菜单栏或托盘。
 - macOS 菜单栏使用模板图标，并在图标旁显示短状态：计时中为距离下次休息的 `mm:ss`，休息中为 `休息 mm:ss`，暂停、会议、时段外、未开始等用短词标出。Windows 不支持 `Tray.setTitle`，同一段倒计时和状态写在托盘提示里。
 - 小看板按托盘位置与当前显示器工作区定位，支持负坐标。设置窗口不超过屏幕高度，保存／取消不因失焦丢失。
 - 每个显示器一个不透明覆盖窗口，不使用 kiosk。全部界面就绪并复核系统状态后展示，休息时钟从展示后开始；准备超过 5 秒取消本轮、记录失败并尝试静音系统通知。

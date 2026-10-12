@@ -1,5 +1,5 @@
-import { useState, useSyncExternalStore } from 'react'
-import { ArrowLeft, CalendarDays, Check, Clock3, Minus, Monitor, Moon, Plus, Power, Sun, Volume2 } from 'lucide-react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import { ArrowLeft, CalendarDays, Check, Clock3, Minus, Monitor, Moon, Plus, Power, Sun, Volume2, X } from 'lucide-react'
 import type { ReminderClient, ReminderSettings, Theme } from '../contracts/reminder'
 import { Toggle } from '../components/Toggle'
 import { validateSettings } from '../domain/schedule'
@@ -8,12 +8,24 @@ import { SoftwareUpdate } from './SoftwareUpdate'
 import type { ShellClient, UpdateClient } from '../services/desktop-client'
 
 function LaunchAtLogin({ shell, notify }: { shell: ShellClient; notify: (message: string) => void }) {
-  const enabled = useSyncExternalStore(shell.subscribe, shell.getLaunchAtLogin)
+  const item = useSyncExternalStore(shell.subscribe, shell.getLoginItem)
   const [pending, setPending] = useState(false)
-  return <Toggle label="开机自启动" description="登录后停在菜单栏或托盘，不打开看板" checked={enabled} disabled={pending} onChange={value => {
-    setPending(true)
-    void shell.setLaunchAtLogin(value).then(message => { if (message) notify(message) }).catch(() => notify('无法更改开机自启动')).finally(() => setPending(false))
-  }} />
+  useEffect(() => {
+    const refresh = () => { void shell.refreshLaunchAtLogin().catch(() => {}) }
+    refresh()
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [shell])
+  return <div className="login-setting">
+    <Toggle label="开机自启动" description="登录后停在菜单栏或托盘，不打开看板" checked={item.openAtLogin} disabled={pending} onChange={value => {
+      setPending(true)
+      void shell.setLaunchAtLogin(value).then(message => { if (message) notify(message) }).catch(() => notify('无法更改开机自启动')).finally(() => setPending(false))
+    }} />
+    {item.message && <div className="login-hint" role="status">
+      <p>{item.message}</p>
+      {item.approvalNeeded && <button type="button" className="text-button" onClick={() => void shell.openLoginItemsSettings().catch(() => notify('无法打开系统设置'))}>打开系统设置</button>}
+    </div>}
+  </div>
 }
 
 export function Settings({ settings, client, onClose, notify, playSound, updates, shell }: {
@@ -37,7 +49,14 @@ export function Settings({ settings, client, onClose, notify, playSound, updates
     finally { setSaving(false) }
   }
   return <section className="app-window settings-window" aria-labelledby="settings-title">
-    <header className="window-header settings-header"><button className="icon-button" aria-label="取消修改，返回看板" onClick={onClose}><ArrowLeft size={19} /></button><h1 id="settings-title">提醒设置</h1>{shell ? <button className="icon-button" aria-label="最小化" title="最小化" onClick={() => void shell.minimize()}><Minus size={16} /></button> : <span className="header-spacer" />}</header>
+    <header className="window-header settings-header">
+      <button className="icon-button" aria-label="取消修改，返回看板" onClick={onClose}><ArrowLeft size={16} strokeWidth={1.8} /></button>
+      <h1 id="settings-title">提醒设置</h1>
+      {shell && <div className="window-controls">
+        <button className="icon-button" aria-label="最小化" title="最小化" onClick={() => void shell.minimize()}><Minus size={16} strokeWidth={1.8} /></button>
+        <button className="icon-button window-close" aria-label="退出 remind" title="退出" onClick={() => void shell.quit()}><X size={16} strokeWidth={1.8} /></button>
+      </div>}
+    </header>
     <div className="settings-scroll">
       <section className="settings-section"><h2><Clock3 size={15} />时间与提醒</h2>
         <div className="field-heading"><label htmlFor="work-minutes">提醒间隔</label><span>分钟</span></div>
@@ -52,7 +71,7 @@ export function Settings({ settings, client, onClose, notify, playSound, updates
         <div className="future-setting"><div><span className="setting-label">会议自动暂停</span><span className="helper">腾讯会议、飞书会议</span></div><span className="subtle-badge">待接入</span></div>
       </section>
       <section className="settings-section appearance-section"><h2><Sun size={15} />外观</h2><div className="theme-picker">{([{ value: 'system', label: '跟随系统', icon: Monitor }, { value: 'light', label: '浅色', icon: Sun }, { value: 'dark', label: '深色', icon: Moon }] as { value: Theme; label: string; icon: typeof Sun }[]).map(({ value, label, icon: Icon }) => <button key={value} className={draft.theme === value ? 'selected' : ''} aria-pressed={draft.theme === value} onClick={() => update('theme', value)}><Icon size={15} />{label}</button>)}</div></section>
-      {shell && <section className="settings-section"><h2><Power size={15} />系统</h2><LaunchAtLogin shell={shell} notify={notify} /><button className="quit-app settings-quit" onClick={() => void shell.quit()}>退出 remind</button><p className="helper">退出后后台计时会停止。收起看板不会退出。</p></section>}
+      {shell && <section className="settings-section"><h2><Power size={15} />系统</h2><LaunchAtLogin shell={shell} notify={notify} /></section>}
       {updates && <SoftwareUpdate client={updates} />}
     </div>
     <footer className="settings-footer">{error && <p className="form-error" role="alert">{error}</p>}<div><button className="button secondary" onClick={onClose}>取消</button><button className="button primary" disabled={saving} onClick={() => void save()}><Check size={16} />{saving ? '保存中…' : '保存设置'}</button></div></footer>
