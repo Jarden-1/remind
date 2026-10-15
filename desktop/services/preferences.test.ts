@@ -53,3 +53,32 @@ describe('native persistence', () => {
     expect(readdirSync(dir)).not.toContain('preferences.json')
   }, 20_000)
 })
+
+describe('history recovery and event compatibility', () => {
+  const legacy = () => ({ version: 1 as const, type: 'break.ended' as const, id: 'old', at: new Date().toISOString(), outcome: 'skipped' as const })
+  it('retains valid legacy records and backs up corrupt entries', () => {
+    const dir = directory(); const file = join(dir, 'history.json')
+    writeFileSync(file, JSON.stringify({ records: [legacy(), null, { garbage: true }] }))
+    const history = new HistoryStore(dir)
+    history.append({ version: 2, type: 'break.ended', id: 'new', at: new Date().toISOString(), outcome: 'snoozed', plannedSeconds: 180, actualSeconds: 12 })
+    expect(JSON.parse(readFileSync(file, 'utf8')).records.map((event: { id: string }) => event.id)).toEqual(['old', 'new'])
+    expect(readdirSync(dir).some(name => name.includes('.invalid-'))).toBe(true)
+  })
+  it('backs up malformed JSON instead of silently deleting the record file', () => {
+    const dir = directory(); writeFileSync(join(dir, 'history.json'), '{broken')
+    new HistoryStore(dir).append(legacy())
+    expect(readdirSync(dir).some(name => name.includes('.corrupt-'))).toBe(true)
+  })
+  it('keeps future event versions untouched', () => {
+    const dir = directory(); const file = join(dir, 'history.json')
+    const contents = JSON.stringify({ records: [{ version: 99, future: true }] })
+    writeFileSync(file, contents)
+    expect(() => new HistoryStore(dir).append(legacy())).toThrow('更新版本')
+    expect(readFileSync(file, 'utf8')).toBe(contents)
+  })
+  it('does not append the same end event twice', () => {
+    const dir = directory(); const history = new HistoryStore(dir); const event = legacy()
+    history.append(event); history.append(event)
+    expect(JSON.parse(readFileSync(join(dir, 'history.json'), 'utf8')).records).toHaveLength(1)
+  })
+})

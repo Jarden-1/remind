@@ -40,8 +40,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - name: Require a matching version for tagged releases
-        if: github.ref_type == 'tag'
+      - name: Validate signing configuration and tagged versions
         shell: bash
         env:
           RELEASE_PLATFORM: ${{ matrix.platform }}
@@ -90,11 +89,16 @@ jobs:
           verify_app() {
             local app="$1"
             echo "== codesign display: $app =="
-            codesign -dv --verbose=4 "$app"
+            signature=$(codesign -dv --verbose=4 "$app" 2>&1)
+            echo "$signature"
             echo "== codesign verify: $app =="
             codesign --verify --deep --strict --verbose=2 "$app"
             echo "== spctl: $app =="
-            spctl --assess --type execute --verbose=4 "$app" || echo "spctl did not accept this signature. Ad-hoc signatures are recorded here and should produce an unidentified-developer prompt rather than a damaged-app error."
+            if [[ "$signature" == *"Authority=Developer ID Application:"* ]]; then
+              spctl --assess --type execute --verbose=4 "$app"
+            else
+              spctl --assess --type execute --verbose=4 "$app" || echo "Ad-hoc test build: Gatekeeper approval is not implied."
+            fi
           }
           for app in "${apps[@]}"; do verify_app "$app"; done
           shopt -s nullglob
@@ -128,11 +132,21 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           pattern: remind-*
           merge-multiple: true
           path: dist
+      - name: Verify installer versions and update checksums
+        run: node scripts/verify-artifacts.mjs dist
       - name: Publish a draft GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -150,10 +164,12 @@ jobs:
           A Developer ID certificate and notarization replace that ad-hoc signature when the signing secrets are set.
 
           This release stays a draft until it is published manually. The in-app updater only offers published releases.'
-          # This job has no checkout. gh treats a missing git repo as a hard error
-          # unless --repo is set, even when GH_TOKEN is present.
+          prerelease=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then prerelease+=(--prerelease); fi
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            draft=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')
+            if [ "$draft" != "true" ]; then echo "Refusing to replace a published release. Create a new version."; exit 1; fi
             gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$GITHUB_REF_NAME" "${files[@]}" --draft --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY" --title "remind $GITHUB_REF_NAME" --notes "$notes"
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" --draft "${prerelease[@]}" --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY" --title "remind $GITHUB_REF_NAME" --notes "$notes"
           fi

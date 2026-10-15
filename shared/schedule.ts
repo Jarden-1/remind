@@ -27,7 +27,14 @@ export function validateSettings(settings: ReminderSettings): string | null {
 export function getScheduleState(settings: ReminderSettings, now: Date) {
   if (!settings.schedule.enabled) return { allowed: true, endAt: null, nextAt: null }
   const minutes = now.getHours() * 60 + now.getMinutes()
-  const ranges = [...settings.schedule.ranges].sort((a, b) => a.start.localeCompare(b.start))
+  // Adjacent ranges are continuous work, not an artificial end-of-period boundary.
+  const ranges: typeof settings.schedule.ranges = []
+  for (const range of [...settings.schedule.ranges].sort((a, b) => a.start.localeCompare(b.start))) {
+    const previous = ranges.at(-1)
+    if (previous && toMinutes(range.start) <= toMinutes(previous.end)) {
+      if (toMinutes(range.end) > toMinutes(previous.end)) previous.end = range.end
+    } else ranges.push({ ...range })
+  }
   if (settings.schedule.days.includes(now.getDay())) {
     const current = ranges.find(range => minutes >= toMinutes(range.start) && minutes < toMinutes(range.end))
     if (current) {

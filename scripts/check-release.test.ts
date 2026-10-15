@@ -19,3 +19,9 @@ describe('release credential check', () => {
     expect(assertReleaseReady({ refName: 'v0.1.0', version, platform: 'win', env: { CSC_LINK: 'cert', CSC_KEY_PASSWORD: 'secret' } })).toEqual({ signed: true })
   })
 })
+
+import { assertSigningReady } from './check-release.mjs'
+it('rejects partial credentials even for a manual non-tagged build', () => {
+  expect(() => assertSigningReady({ platform: 'mac', env: { APPLE_TEAM_ID: 'team' } })).toThrow('Incomplete')
+  expect(assertSigningReady({ platform: 'mac', env: { CSC_LINK: '  ' } })).toEqual({ signed: false })
+})

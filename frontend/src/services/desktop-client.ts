@@ -30,13 +30,9 @@ export class DesktopClient implements ReminderClient, UpdateClient, ShellClient 
     catch (error) { client.dispose(); throw error }
   }
   private receive(state: DesktopState) {
-    const stale = this.current && this.current.reminder.revision > state.reminder.revision && this.current.update.revision > state.update.revision
-    this.current = {
-      reminder: this.current && this.current.reminder.revision > state.reminder.revision ? this.current.reminder : state.reminder,
-      update: this.current && this.current.update.revision > state.update.revision ? this.current.update : state.update,
-      launchAtLogin: stale ? this.current.launchAtLogin : state.launchAtLogin,
-      loginItem: stale ? this.current.loginItem : state.loginItem,
-    }
+    // A whole-state revision also orders login-item changes with unchanged timer/update revisions.
+    if (this.current && state.revision <= this.current.revision) return
+    this.current = state
     for (const listener of this.listeners) listener()
   }
   getSnapshot = (): ReminderSnapshot => this.current.reminder

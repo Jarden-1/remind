@@ -24,6 +24,8 @@ export interface ReminderSnapshot {
   lastInPeriod: boolean
   nextWorkAt: string | null
   storageError: boolean
+  /** Frozen when a break is requested, before native windows finish loading. */
+  plannedBreakSeconds?: number
   preparingBreak?: boolean
   displayError?: boolean
 }

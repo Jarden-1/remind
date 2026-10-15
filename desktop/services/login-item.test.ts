@@ -47,3 +47,28 @@ describe('login item', () => {
     expect(launchedHidden(['.'], { wasOpenedAtLogin: false })).toBe(false)
   })
 })
+import { vi } from 'vitest'
+import { LoginItems, type LoginItemPort } from './login-item'
+
+describe('login-item failure isolation', () => {
+  function port(): LoginItemPort { return { read: vi.fn(() => ({ status: 'enabled' as const, wasOpenedAtLogin: true })), write: vi.fn(), location: () => 'applications', report: vi.fn() } }
+  it('continues startup when the OS denies registration', () => {
+    const os = port(); vi.mocked(os.write).mockImplementation(() => { throw new Error('denied') })
+    const items = new LoginItems('darwin', true, os)
+    expect(() => items.apply(true)).not.toThrow()
+    expect(items.snapshot.status).toBe('unavailable')
+    expect(items.snapshot.message).toContain('请重试')
+    expect(items.launchReading.wasOpenedAtLogin).toBe(true)
+  })
+  it('does not register a development Electron executable as a Windows login item', () => {
+    const os = port(); new LoginItems('win32', false, os).apply(true)
+    expect(os.write).not.toHaveBeenCalled()
+    expect(os.read).not.toHaveBeenCalled()
+  })
+  it('recovers actual state after a transient read failure', () => {
+    const os = port(); vi.mocked(os.read).mockImplementationOnce(() => { throw new Error('unavailable') })
+    const items = new LoginItems('darwin', true, os)
+    expect(items.refresh(true).status).toBe('unavailable')
+    expect(items.refresh(true).status).toBe('enabled')
+  })
+})

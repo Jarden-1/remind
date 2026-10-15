@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS } from '../contracts/reminder'
 
 function state(revision: number): DesktopState {
   return {
+    revision,
     reminder: { revision, phase: 'work', settings: DEFAULT_SETTINGS, remainingSeconds: 2700 - revision, totalSeconds: 2700, pauseReasons: [], pauseUntil: null, preReminderVisible: false, lastInPeriod: false, nextWorkAt: null, storageError: false },
     update: { revision, status: 'idle', delivery: 'native', currentVersion: '0.1.0', version: null, progress: 0, message: null },
     launchAtLogin: revision > 1,
@@ -24,10 +25,11 @@ describe('desktop bridge bootstrap', () => {
       refreshLaunchAtLogin: vi.fn(async () => {}), openLoginItemsSettings: vi.fn(async () => {}),
     }
     const pending = DesktopClient.connect(bridge)
-    receive(state(3)); initial(state(1))
+    const fresh = state(3); fresh.reminder.revision = 1; fresh.update.revision = 1
+    receive(fresh); initial(state(1))
     const client = await pending
-    expect(client.getSnapshot().revision).toBe(3)
-    expect(client.getUpdateSnapshot().revision).toBe(3)
+    expect(client.getSnapshot().revision).toBe(1)
+    expect(client.getUpdateSnapshot().revision).toBe(1)
     expect(client.getLaunchAtLogin()).toBe(true)
     await client.pause(); expect(bridge.command).toHaveBeenCalledWith('pause')
     await client.minimize(); expect(bridge.minimize).toHaveBeenCalledOnce()

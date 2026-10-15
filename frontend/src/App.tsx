@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Check, Coffee, X } from 'lucide-react'
+import { Info, Coffee, X } from 'lucide-react'
 import type { ReminderClient, PreviewControls } from './contracts/reminder'
+import { errorMessage } from './lib/errors'
 import { Panel } from './features/Panel'
 import { Settings } from './features/Settings'
 import { BreakScreen } from './features/BreakScreen'
@@ -34,8 +35,8 @@ export function App({ client, preview, updates, shell, desktopView, desktopSound
     if (!isBreak || !snapshot.settings.sound) chime.current.stop()
     wasBreak.current = isBreak
   }, [snapshot.phase, snapshot.settings.sound])
-  useEffect(() => { if (desktopView === 'panel') void window.remind?.panel(settingsOpen) }, [settingsOpen, desktopView])
-  useEffect(() => { if (desktopView) void window.remind?.ready() }, [desktopView])
+  useEffect(() => { if (desktopView === 'panel') void window.remind?.panel(settingsOpen).catch(error => notify(errorMessage(error))) }, [settingsOpen, desktopView])
+  useEffect(() => { if (desktopView) void window.remind?.ready().catch(error => notify(errorMessage(error))) }, [desktopView])
   useEffect(() => {
     const meeting = snapshot.pauseReasons.includes('meeting')
     if (meeting !== previousMeeting.current) {
@@ -45,13 +46,14 @@ export function App({ client, preview, updates, shell, desktopView, desktopSound
   }, [snapshot.pauseReasons])
   useEffect(() => () => { clearTimeout(toastTimer.current); chime.current.stop() }, [])
   const breaking = snapshot.phase === 'break'
-  const preReminder = <aside className="pre-reminder" role="status"><span className="pre-icon"><Coffee size={21} /></span><div><strong>还有 1 分钟休息</strong><p>可以准备收尾了。</p></div><button className="icon-button" aria-label="关闭提前提醒" onClick={() => void client.dismissPreReminder()}><X size={16} /></button><span className="pre-reminder-line" /></aside>
-  if (desktopView === 'notice') return snapshot.preReminderVisible ? preReminder : null
-  if (desktopView === 'break') return <BreakScreen snapshot={snapshot} client={client} notify={notify} desktop />
+  const preReminder = <aside className="pre-reminder" role="status"><span className="pre-icon"><Coffee size={21} /></span><div><strong>还有 1 分钟休息</strong><p>可以准备收尾了。</p></div><button className="icon-button" aria-label="关闭提前提醒" onClick={() => void client.dismissPreReminder().catch(error => notify(errorMessage(error)))}><X size={16} /></button><span className="pre-reminder-line" /></aside>
+  const feedback = toast && <div className="toast" role="status"><Info size={16} />{toast}</div>
+  if (desktopView === 'notice') return <>{snapshot.preReminderVisible && preReminder}{feedback}</>
+  if (desktopView === 'break') return <><BreakScreen snapshot={snapshot} client={client} notify={notify} desktop />{feedback}</>
   return <>
     <main className="preview-stage" hidden={breaking && !desktopView}><div className="window-wrap">{settingsOpen ? <Settings settings={snapshot.settings} client={client} updates={updates} shell={shell} onClose={() => setSettingsOpen(false)} notify={notify} playSound={playSound} /> : <Panel snapshot={snapshot} client={client} updates={updates} shell={shell} onSettings={() => setSettingsOpen(true)} notify={notify} />}</div>{preview && <PreviewToolbar controls={preview} snapshot={snapshot} />}</main>
     {breaking && !desktopView && <BreakScreen snapshot={snapshot} client={client} notify={notify} />}
     {!desktopView && !breaking && snapshot.preReminderVisible && preReminder}
-    {toast && <div className="toast" role="status"><Check size={16} />{toast}</div>}
+    {feedback}
   </>
 }

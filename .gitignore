@@ -8,3 +8,6 @@ coverage/
 out/
 release/
 *.log
+
+# npm workspaces use the root lockfile.
+frontend/package-lock.json

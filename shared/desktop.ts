@@ -10,13 +10,13 @@ export interface UpdateSnapshot {
   revision: number
   currentVersion: string
   status: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'current' | 'error' | 'unsupported'
-  /** native: download and install in the app. browser: unsigned Mac builds open the release page instead. */
+  /** native: download and install in the app. browser: Mac builds without Developer ID open the release page instead. */
   delivery: UpdateDelivery
   version: string | null
   progress: number
   message: string | null
 }
-export interface DesktopState { reminder: ReminderSnapshot; update: UpdateSnapshot; launchAtLogin: boolean; loginItem: LoginItemState }
+export interface DesktopState { revision: number; reminder: ReminderSnapshot; update: UpdateSnapshot; launchAtLogin: boolean; loginItem: LoginItemState }
 export interface LaunchAtLoginResult { openAtLogin: boolean; message: string | null; approvalNeeded: boolean }
 export interface DesktopBridge {
   state(): Promise<DesktopState>

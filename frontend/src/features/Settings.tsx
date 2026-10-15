@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { ArrowLeft, CalendarDays, Check, Clock3, Minus, Monitor, Moon, Plus, Power, Sun, Volume2, X } from 'lucide-react'
 import type { ReminderClient, ReminderSettings, Theme } from '../contracts/reminder'
+import { errorMessage } from '../lib/errors'
 import { Toggle } from '../components/Toggle'
 import { validateSettings } from '../domain/schedule'
 import { ScheduleEditor } from './ScheduleEditor'
@@ -18,7 +19,7 @@ function LaunchAtLogin({ shell, notify }: { shell: ShellClient; notify: (message
     return () => window.removeEventListener('focus', refresh)
   }, [shell])
   return <div className="login-setting">
-    <Toggle label="开机自启动" description="登录后停在菜单栏或托盘，不打开看板" checked={item.openAtLogin} disabled={pending} onChange={value => {
+    <Toggle label="开机自启动" description="登录后停在菜单栏或托盘，不打开看板" checked={item.openAtLogin} disabled={pending || item.status === 'unsupported'} onChange={value => {
       setPending(true)
       void shell.setLaunchAtLogin(value).then(message => { if (message) notify(message) }).catch(() => notify('无法更改开机自启动')).finally(() => setPending(false))
     }} />
@@ -39,6 +40,7 @@ export function Settings({ settings, client, onClose, notify, playSound, updates
   const [saving, setSaving] = useState(false)
   const update = <K extends keyof ReminderSettings>(key: K, value: ReminderSettings[K]) => { setDraft(d => ({ ...d, [key]: value })); setError(null) }
   async function save() {
+    if (saving) return
     const message = validateSettings(draft)
     if (message) { setError(message); return }
     setSaving(true)
@@ -46,19 +48,19 @@ export function Settings({ settings, client, onClose, notify, playSound, updates
       await client.updateSettings(draft)
       const changed = settings.workMinutes !== draft.workMinutes || JSON.stringify(settings.schedule) !== JSON.stringify(draft.schedule)
       notify(changed ? '设置已保存，下一次提醒已调整' : '设置已保存'); onClose()
-    } catch (error) { setError(error instanceof Error ? error.message : '保存失败，请重试。') }
+    } catch (error) { setError(errorMessage(error, '保存失败，请重试。')) }
     finally { setSaving(false) }
   }
   return <section className="app-window settings-window" aria-labelledby="settings-title">
     <header className="window-header settings-header">
-      <button className="icon-button" aria-label="取消修改，返回看板" {...windowControlHandlers(onClose)}><ArrowLeft size={16} strokeWidth={1.8} /></button>
+      <button className="icon-button" disabled={saving} aria-label="取消修改，返回看板" {...windowControlHandlers(onClose)}><ArrowLeft size={16} strokeWidth={1.8} /></button>
       <h1 id="settings-title">提醒设置</h1>
       {shell && <div className="window-controls">
-        <button className="icon-button" aria-label="最小化" title="最小化" {...windowControlHandlers(() => void shell.minimize())}><Minus size={16} strokeWidth={1.8} /></button>
-        <button className="icon-button window-close" aria-label="退出 remind" title="退出" {...windowControlHandlers(() => void shell.quit())}><X size={16} strokeWidth={1.8} /></button>
+        <button className="icon-button" aria-label="最小化" title="最小化" {...windowControlHandlers(() => void shell.minimize().catch(error => notify(errorMessage(error))))}><Minus size={16} strokeWidth={1.8} /></button>
+        <button className="icon-button window-close" aria-label="退出 remind" title="退出" {...windowControlHandlers(() => void shell.quit().catch(error => notify(errorMessage(error))))}><X size={16} strokeWidth={1.8} /></button>
       </div>}
     </header>
-    <div className="settings-scroll">
+    <fieldset className="settings-scroll" disabled={saving} aria-label="提醒设置选项">
       <section className="settings-section"><h2><Clock3 size={15} />时间与提醒</h2>
         <div className="field-heading"><label htmlFor="work-minutes">提醒间隔</label><span>分钟</span></div>
         <div className="duration-row"><div className="presets">{[30, 45, 60].map(value => <button key={value} className={draft.workMinutes === value ? 'selected' : ''} aria-pressed={draft.workMinutes === value} onClick={() => update('workMinutes', value)}>{value}</button>)}</div><input id="work-minutes" aria-label="自定义提醒间隔，分钟" type="number" min="1" max="240" step="1" value={Number.isNaN(draft.workMinutes) ? '' : draft.workMinutes} onChange={event => update('workMinutes', event.target.valueAsNumber)} /></div>
@@ -74,7 +76,7 @@ export function Settings({ settings, client, onClose, notify, playSound, updates
       <section className="settings-section appearance-section"><h2><Sun size={15} />外观</h2><div className="theme-picker">{([{ value: 'system', label: '跟随系统', icon: Monitor }, { value: 'light', label: '浅色', icon: Sun }, { value: 'dark', label: '深色', icon: Moon }] as { value: Theme; label: string; icon: typeof Sun }[]).map(({ value, label, icon: Icon }) => <button key={value} className={draft.theme === value ? 'selected' : ''} aria-pressed={draft.theme === value} onClick={() => update('theme', value)}><Icon size={15} />{label}</button>)}</div></section>
       {shell && <section className="settings-section"><h2><Power size={15} />系统</h2><LaunchAtLogin shell={shell} notify={notify} /></section>}
       {updates && <SoftwareUpdate client={updates} />}
-    </div>
-    <footer className="settings-footer">{error && <p className="form-error" role="alert">{error}</p>}<div><button className="button secondary" onClick={onClose}>取消</button><button className="button primary" disabled={saving} onClick={() => void save()}><Check size={16} />{saving ? '保存中…' : '保存设置'}</button></div></footer>
+    </fieldset>
+    <footer className="settings-footer">{error && <p className="form-error" role="alert">{error}</p>}<div><button className="button secondary" disabled={saving} onClick={onClose}>取消</button><button className="button primary" disabled={saving} onClick={() => void save()}><Check size={16} />{saving ? '保存中…' : '保存设置'}</button></div></footer>
   </section>
 }

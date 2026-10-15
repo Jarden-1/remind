@@ -141,3 +141,53 @@ describe('user controlled updates', () => {
     }
   })
 })
+describe('update races and shutdown', () => {
+  it('does not publish a download rejection after shutdown', async () => {
+    const { updates, port, emit } = setup()
+    let reject!: (error: Error) => void
+    vi.mocked(port.download).mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail }))
+    emit({ type: 'available', version: '0.2.0' })
+    const download = updates.action('download')
+    const changed = vi.fn(); updates.subscribe(changed)
+    updates.stop(); reject(new Error('cancelled while quitting'))
+    await download
+    expect(changed).not.toHaveBeenCalled()
+    expect(updates.snapshot.status).toBe('downloading')
+  })
+  it('joins a background check when the user clicks check and displays its failure', async () => {
+    const { updates, port, emit } = setup(); const time = clock()
+    let reject!: (error: Error) => void
+    vi.mocked(port.check).mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail }))
+    updates.arm(time.api); await time.advance(updateCheckDelayMs)
+    const manual = updates.action('check')
+    expect(updates.snapshot.status).toBe('checking')
+    const error = new Error('offline'); emit({ type: 'error', error }); reject(error)
+    await manual
+    expect(port.check).toHaveBeenCalledOnce()
+    expect(updates.snapshot.status).toBe('error')
+  })
+  it('does not let late feed results reset an active download', async () => {
+    const { updates, emit } = setup()
+    emit({ type: 'available', version: '0.2.0' }); await updates.action('download')
+    emit({ type: 'current' }); emit({ type: 'available', version: '0.3.0' })
+    expect(updates.snapshot.status).toBe('downloading')
+    expect(updates.snapshot.version).toBe('0.2.0')
+    emit({ type: 'progress', percent: NaN }); expect(updates.snapshot.progress).toBe(0)
+  })
+  it('retains a verified download if native installation reports an asynchronous failure', async () => {
+    const { updates, emit } = setup()
+    emit({ type: 'downloaded', version: '0.2.0' }); await updates.action('install')
+    emit({ type: 'error', error: new Error('installer unavailable') })
+    expect(updates.snapshot.status).toBe('downloaded')
+    expect(updates.snapshot.message).toContain('安装失败')
+  })
+  it('ignores in-flight responses after shutdown without notifying or scheduling more checks', async () => {
+    const { updates, port, emit } = setup(); const time = clock(); const discovered = vi.fn()
+    updates.onDiscovered(discovered); updates.arm(time.api)
+    await time.advance(updateCheckDelayMs); updates.stop()
+    emit({ type: 'available', version: '0.2.0' }); await time.advance(updateCheckIntervalMs)
+    expect(discovered).not.toHaveBeenCalled()
+    expect(port.check).toHaveBeenCalledOnce()
+    expect(updates.snapshot.status).toBe('idle')
+  })
+})

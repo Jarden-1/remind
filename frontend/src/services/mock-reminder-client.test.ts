@@ -103,3 +103,11 @@ describe('preview reminder state', () => {
     expect(client.getSnapshot().pauseReasons).toEqual(['meeting', 'schedule'])
   })
 })
+
+it('shows a full snooze cycle independent of the configured interval', async () => {
+  const { client } = setup()
+  await client.updateSettings({ ...client.getSnapshot().settings, workMinutes: 1 })
+  await client.startBreak(); await client.snooze()
+  expect(client.getSnapshot().remainingSeconds).toBe(300)
+  expect(client.getSnapshot().totalSeconds).toBe(300)
+})

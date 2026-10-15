@@ -1,8 +1,8 @@
 import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, powerMonitor, screen, shell, Tray, type IpcMainInvokeEvent } from 'electron'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import log from 'electron-log/main'
 import electronUpdater from 'electron-updater'
 import { z } from 'zod'
@@ -12,13 +12,18 @@ import { ReminderEngine } from '../domain/reminder-engine'
 import { PreferencesStore, HistoryStore } from '../services/preferences'
 import { macNativeUpdateSupported } from '../services/code-signature'
 import { Updates, type UpdatePort } from '../services/updates'
-import { shouldHidePanel } from '../domain/panel-window'
+import { shouldHidePanel, panelBounds } from '../domain/panel-window'
 import { trayPresentation } from '../domain/tray-status'
-import { canRegisterLoginItem, classifyInstallLocation, desiredOpenAtLogin, launchedHidden, loginItemQuery, loginItemRequest, loginItemsSettingsUrl, presentLoginItem, type LoginItemReading, type LoginItemState } from '../services/login-item'
+import { classifyInstallLocation, desiredOpenAtLogin, launchedHidden, loginItemsSettingsUrl, LoginItems, type LoginItemState } from '../services/login-item'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const releasesUrl = 'https://github.com/Jarden-1/remind/releases'
 app.setName('remind')
+if (!app.isPackaged) {
+  const directory = process.env.REMIND_DEV_DATA_DIR ? resolve(process.env.REMIND_DEV_DATA_DIR) : join(app.getPath('appData'), 'remind-development')
+  mkdirSync(directory, { recursive: true })
+  app.setPath('userData', directory)
+}
 let quitting = false
 let panel: BrowserWindow | null = null
 let notice: BrowserWindow | null = null
@@ -26,6 +31,8 @@ let tray: Tray | null = null
 let engine: ReminderEngine
 let updates!: Updates
 let preferences: PreferencesStore
+let loginItems: LoginItems
+let stateRevision = 0
 const managed = new Map<number, { window: BrowserWindow; view: DesktopView; url: string }>()
 const readiness = new Map<number, () => void>()
 let breakWindows: BrowserWindow[] = []
@@ -35,12 +42,32 @@ let preparingGeneration: number | null = null
 let tickTimer: ReturnType<typeof setInterval> | undefined
 let recoveryTimer: ReturnType<typeof setTimeout> | undefined
 let loginItem: LoginItemState = { openAtLogin: false, status: 'unsupported', approvalNeeded: false, message: null }
+let panelSettingsOpen = false
 const panelWidth = 368
 const panelHeight = 464
 
-function state(): DesktopState { return { reminder: engine.snapshot, update: updates.snapshot, launchAtLogin: loginItem.openAtLogin, loginItem } }
+function state(): DesktopState { return { revision: ++stateRevision, reminder: engine.snapshot, update: updates.snapshot, launchAtLogin: loginItem.openAtLogin, loginItem } }
 function broadcast() {
-  for (const { window, view } of managed.values()) if (!window.isDestroyed() && (window.isVisible() || view === 'break')) window.webContents.send('remind:changed', state())
+  const snapshot = state()
+  for (const { window, view } of managed.values()) {
+    if (window.isDestroyed() || window.webContents.isDestroyed() || (!window.isVisible() && view !== 'break')) continue
+    try { window.webContents.send('remind:changed', snapshot) }
+    catch (error) { log.error('Cannot deliver window state', error) }
+  }
+}
+function notifySystem(title: string, body: string, clicked?: () => void) {
+  try {
+    if (!Notification.isSupported()) return
+    const notification = new Notification({ title, body, silent: true })
+    if (clicked) notification.on('click', clicked)
+    notification.show()
+  } catch (error) { log.warn('System notification unavailable', error) }
+}
+function failBreakDisplay(generation: number, error: unknown) {
+  log.error('Break display failed', error)
+  if (engine.generation !== generation || (!engine.snapshot.preparingBreak && engine.snapshot.phase !== 'break')) return
+  engine.failBreak(generation)
+  notifySystem('该起来活动一下了', '休息窗口未能打开')
 }
 function rendererUrl(view: DesktopView, sound = false) {
   const url = process.env.ELECTRON_RENDERER_URL && !app.isPackaged
@@ -68,6 +95,7 @@ function makeWindow(view: DesktopView, options: Electron.BrowserWindowConstructo
 }
 function quitApp() {
   quitting = true
+  engine?.shutdown()
   clearInterval(tickTimer)
   clearTimeout(recoveryTimer)
   updates?.stop()
@@ -91,22 +119,25 @@ function showPanel() {
   if (!panel || panel.isDestroyed()) {
     const created = makeWindow('panel', { width: panelWidth, height: panelHeight, resizable: false, frame: false, minimizable: true, skipTaskbar: true, alwaysOnTop: true })
     panel = created.window
+    panelSettingsOpen = false
+    panel.webContents.on('render-process-gone', (_event, details) => {
+      log.error('Panel renderer exited', details.reason)
+      if (!created.window.isDestroyed()) created.window.destroy()
+    })
     panel.on('close', event => { if (!quitting) { event.preventDefault(); panel?.hide() } })
     panel.on('focus', () => refreshLoginFromOs())
     void created.load().then(() => placePanel()).catch(error => log.error('Panel failed to load', error))
   } else { placePanel(); broadcast() }
 }
 function placePanel() {
-  if (!panel || panel.isDestroyed()) return
+  if (!panel || panel.isDestroyed() || engine.snapshot.preparingBreak || engine.snapshot.phase === 'break') return
   if (panel.isMinimized()) panel.restore()
   panel.setAlwaysOnTop(true)
   const anchor = tray?.getBounds()
   const point = anchor && anchor.width > 0 ? { x: anchor.x + anchor.width / 2, y: anchor.y + anchor.height / 2 } : screen.getCursorScreenPoint()
   const area = screen.getDisplayNearestPoint(point).workArea
-  const [width, height] = panel.getSize()
-  const x = Math.max(area.x + 8, Math.min(point.x - width / 2, area.x + area.width - width - 8))
-  const y = Math.max(area.y + 8, Math.min(process.platform === 'darwin' ? area.y + 8 : area.y + area.height - height - 8, area.y + area.height - height - 8))
-  panel.setPosition(Math.round(x), Math.round(y)); panel.show(); panel.focus()
+  panel.setBounds(panelBounds(area, point, process.platform, panelSettingsOpen), false)
+  panel.show(); panel.focus()
 }
 function closeBreakWindows() {
   const windows = breakWindows; breakWindows = []
@@ -128,7 +159,7 @@ function makeBreakWindow(display: Electron.Display, generation: number, sound = 
   window.setAlwaysOnTop(true, 'screen-saver')
   if (process.platform === 'darwin') window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   window.webContents.on('before-input-event', (event, input) => { if (input.key === 'Escape') { event.preventDefault(); engine.command('endBreak') } })
-  const failed = () => { if (engine.generation === generation && breakWindows.includes(window)) engine.failBreak(generation) }
+  const failed = () => { if (!quitting && engine.generation === generation && breakWindows.includes(window)) failBreakDisplay(generation, new Error('Break window exited unexpectedly')) }
   window.on('closed', failed); window.webContents.on('render-process-gone', failed)
   const ready = new Promise<void>(resolve => readiness.set(window.webContents.id, resolve))
   return { window, loaded: Promise.all([ready, load()]) }
@@ -149,9 +180,14 @@ function coverDisplay(window: BrowserWindow, display: Electron.Display, show = f
 }
 function refreshBreakDisplays() {
   const generation = engine.generation
+  try { refreshBreakDisplayLayout() } catch (error) { failBreakDisplay(generation, error) }
+}
+function refreshBreakDisplayLayout() {
+  const generation = engine.generation
   if (engine.snapshot.preparingBreak) { engine.failBreak(generation); return }
   if (engine.snapshot.phase !== 'break') return
   const displays = screen.getAllDisplays()
+  if (!displays.length) throw new Error('No displays available')
   const removed = breakWindows.filter(window => !displays.some(display => display.id === windowDisplays.get(window.id)))
   breakWindows = breakWindows.filter(window => !removed.includes(window))
   for (const window of removed) { windowDisplays.delete(window.id); if (!window.isDestroyed()) window.destroy() }
@@ -159,7 +195,7 @@ function refreshBreakDisplays() {
     const existing = breakWindows.find(window => windowDisplays.get(window.id) === display.id)
     if (existing) {
       try { coverDisplay(existing, display) }
-      catch (error) { log.error(error); engine.failBreak(generation); return }
+      catch (error) { failBreakDisplay(generation, error); return }
       continue
     }
     const created = makeBreakWindow(display, generation)
@@ -170,7 +206,7 @@ function refreshBreakDisplays() {
         const current = screen.getAllDisplays().find(item => item.id === display.id)
         if (current) coverDisplay(created.window, current, true)
       })
-      .catch(error => { log.error(error); if (engine.generation === generation && breakWindows.includes(created.window)) engine.failBreak(generation) })
+      .catch(error => { if (breakWindows.includes(created.window)) failBreakDisplay(generation, error) })
       .finally(() => clearTimeout(timeout))
   }
   if (removed.length) breakWindows[0]?.focus()
@@ -181,6 +217,7 @@ async function prepareBreak(generation: number) {
   let timeout: ReturnType<typeof setTimeout> | undefined
   try {
     const displays = screen.getAllDisplays()
+    if (!displays.length) throw new Error('No displays available')
     const primary = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
     const pending = displays.map(display => {
       return makeBreakWindow(display, generation, display.id === primary.id).loaded
@@ -199,11 +236,7 @@ async function prepareBreak(generation: number) {
     breakWindows.find(window => windowDisplays.get(window.id) === primary.id)?.focus()
     if (!engine.confirmBreak(generation)) closeBreakWindows()
   } catch (error) {
-    log.error('Break display failed', error)
-    if (engine.generation === generation) {
-      engine.failBreak(generation)
-      if (Notification.isSupported()) new Notification({ title: '该起来活动一下了', body: '休息窗口未能打开', silent: true }).show()
-    }
+    failBreakDisplay(generation, error)
   } finally { clearTimeout(timeout); if (preparingGeneration === generation) preparingGeneration = null }
 }
 function syncWindows() {
@@ -251,10 +284,8 @@ function setupIpc() {
     await updates.action(action)
   })
   ipcMain.handle('remind:panel', (event, input: unknown) => {
-    const entry = trusted(event, ['panel'])
-    const open = z.boolean().parse(input)
-    const area = screen.getDisplayMatching(entry.window.getBounds()).workArea
-    entry.window.setSize(panelWidth, open ? Math.min(740, area.height - 24) : panelHeight)
+    trusted(event, ['panel'])
+    panelSettingsOpen = z.boolean().parse(input)
     placePanel()
   })
   ipcMain.handle('remind:window', (event, input: unknown) => {
@@ -288,20 +319,7 @@ function installLocation() {
   if (process.platform !== 'darwin') return 'unsupported' as const
   return classifyInstallLocation(app.getPath('exe'), app.isInApplicationsFolder())
 }
-function readLoginItem(): LoginItemReading {
-  const platform = loginPlatform()
-  if (!platform) return { openAtLogin: false }
-  return app.getLoginItemSettings(loginItemQuery(platform))
-}
-function publishLogin(requested: boolean) {
-  loginItem = presentLoginItem(readLoginItem(), installLocation(), requested)
-}
-function applyLoginItem(enabled: boolean) {
-  const platform = loginPlatform()
-  const location = installLocation()
-  if (platform && canRegisterLoginItem(location)) app.setLoginItemSettings(loginItemRequest(enabled, platform))
-  publishLogin(enabled)
-}
+function applyLoginItem(enabled: boolean) { loginItem = loginItems.apply(enabled) }
 function persistLogin() {
   try { preferences.write(engine.getPreferences()); engine.setStorageError(false) }
   catch (error) { engine.setStorageError(true); log.error(error); throw new Error('开机自启动状态无法保存，请重试') }
@@ -309,7 +327,7 @@ function persistLogin() {
 function refreshLoginFromOs() {
   if (!engine) return
   const prefs = engine.getPreferences()
-  publishLogin(desiredOpenAtLogin(prefs.loginItemChosen, prefs.openAtLogin))
+  loginItem = loginItems.refresh(desiredOpenAtLogin(prefs.loginItemChosen, prefs.openAtLogin))
   broadcast()
 }
 function setupTray() {
@@ -360,13 +378,20 @@ else {
   app.on('second-instance', () => { if (engine) showPanel() })
   app.on('window-all-closed', () => {})
   app.on('activate', () => { if (engine) showPanel() })
-  app.on('before-quit', () => { quitting = true; clearInterval(tickTimer); clearTimeout(recoveryTimer); updates?.stop() })
+  app.on('before-quit', () => { quitting = true; engine?.shutdown(); clearInterval(tickTimer); clearTimeout(recoveryTimer); updates?.stop() })
   void app.whenReady().then(async () => {
     log.initialize(); log.transports.file.maxSize = 1024 * 1024
     Menu.setApplicationMenu(null)
     if (process.platform === 'darwin') app.dock?.hide()
     preferences = new PreferencesStore(app.getPath('userData'))
-    const loginReading = readLoginItem()
+    loginItems = new LoginItems(loginPlatform(), app.isPackaged, {
+      read: query => app.getLoginItemSettings(query),
+      write: request => app.setLoginItemSettings(request),
+      location: installLocation,
+      report: error => log.error('Login item unavailable', error),
+    })
+    loginItems.refresh(preferences.initial.openAtLogin)
+    const loginReading = loginItems.launchReading
     const chosen = preferences.initial.loginItemChosen
     const desired = desiredOpenAtLogin(chosen, preferences.initial.openAtLogin)
     applyLoginItem(desired)
@@ -378,8 +403,10 @@ else {
     engine = new ReminderEngine({ monotonic: () => performance.now(), now: () => new Date() }, initial)
     engine.setStorageError(preferences.recovered)
     if (initial.manualPaused !== engine.getPreferences().manualPaused || initial.pauseUntil !== engine.getPreferences().pauseUntil) persist()
-    const history = new HistoryStore(app.getPath('userData'))
-    engine.onEvent(event => { try { history.append(event) } catch (error) { log.error('Cannot save break history', error) } })
+    let history: HistoryStore | undefined
+    try { history = new HistoryStore(app.getPath('userData')) }
+    catch (error) { log.error('History unavailable; reminders remain active', error) }
+    engine.onEvent(event => { try { history?.append(event) } catch (error) { log.error('Cannot save break history', error) } })
     const { autoUpdater } = electronUpdater
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = false
@@ -402,11 +429,12 @@ else {
     const delivery = packagedUpdates && process.platform === 'darwin' && !await macNativeUpdateSupported() ? 'browser' : 'native'
     updates = new Updates(port, app.getVersion(), packagedUpdates, () => !engine.snapshot.preparingBreak && engine.snapshot.phase !== 'break' && !engine.snapshot.pauseReasons.some(reason => ['meeting', 'locked', 'suspended', 'updating'].includes(reason)), app.isPackaged ? '此测试包不支持在线更新' : undefined, delivery)
     updates.onDiscovered(version => {
-      if (quitting || !Notification.isSupported()) return
+      if (quitting) return
       const browser = updates?.snapshot.delivery === 'browser'
-      const notice = new Notification({ title: '发现新版本', body: browser ? `remind ${version} 已发布，点击打开下载页面` : `remind ${version} 已发布，可在看板中下载并安装`, silent: true })
-      notice.on('click', () => { if (browser) void shell.openExternal(releasesUrl); else showPanel() })
-      notice.show()
+      notifySystem('发现新版本', browser ? `remind ${version} 已发布，点击打开下载页面` : `remind ${version} 已发布，可在看板中下载并安装`, () => {
+        if (browser) void shell.openExternal(releasesUrl).catch(error => log.error('Cannot open release page', error))
+        else showPanel()
+      })
     })
     updates.arm()
     setupIpc(); setupTray()

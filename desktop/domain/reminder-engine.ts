@@ -3,7 +3,8 @@ import type { Preferences, ReminderCommand } from '../../shared/desktop'
 import { getScheduleState } from '../../shared/schedule'
 
 export interface Clock { monotonic(): number; now(): Date }
-export type BreakEvent = { version: 1; type: 'break.started' | 'break.ended'; id: string; at: string; outcome?: 'completed' | 'skipped' | 'interrupted' | 'display_failed' }
+export type { BreakEvent } from '../../shared/break-events'
+import type { BreakEvent, BreakOutcome } from '../../shared/break-events'
 export const freshPreferences = (): Preferences => ({ settings: structuredClone(DEFAULT_SETTINGS), started: false, manualPaused: false, openAtLogin: true, loginItemChosen: false, pauseUntil: null })
 
 /** The main process is the sole clock. Renderers only send intent and display snapshots. */
@@ -13,6 +14,8 @@ export class ReminderEngine {
   private events = new Set<(event: BreakEvent) => void>()
   private system = new Set<PauseReason>()
   private remainingMs: number
+  private workTotalMs: number
+  private breakElapsedMs = 0
   private breakTotalMs = 0
   private breaking = false
   private preparing = false
@@ -39,6 +42,7 @@ export class ReminderEngine {
       this.preferences.pauseUntil = null
     }
     this.remainingMs = this.workMs
+    this.workTotalMs = this.workMs
     this.lastMono = clock.monotonic()
     this.lastWall = clock.now().getTime()
     this.scheduleAllowed = getScheduleState(this.settings, clock.now()).allowed
@@ -53,11 +57,11 @@ export class ReminderEngine {
   private reasons(): PauseReason[] {
     return [...(this.preferences.manualPaused ? ['manual' as const] : []), ...this.system, ...(!this.scheduleAllowed ? ['schedule' as const] : [])]
   }
-  private reset() { this.remainingMs = this.workMs; this.preSent = false; this.preVisible = false }
-  private interrupt(outcome: 'completed' | 'skipped' | 'interrupted' | 'display_failed') {
+  private reset() { this.workTotalMs = this.workMs; this.remainingMs = this.workMs; this.preSent = false; this.preVisible = false }
+  private interrupt(outcome: BreakOutcome) {
     const active = this.breaking || this.preparing
     this.breaking = false; this.preparing = false; this.manualBreakOutside = false
-    if (active) this.emit({ version: 1, type: 'break.ended', id: `${this.sessionId}:${this.generation}`, at: this.clock.now().toISOString(), outcome })
+    if (active) this.emit({ version: 2, type: 'break.ended', id: `${this.sessionId}:${this.generation}`, at: this.clock.now().toISOString(), outcome, plannedSeconds: this.breakTotalMs / 1000, actualSeconds: Math.round(Math.min(this.breakElapsedMs, this.breakTotalMs)) / 1000 })
     this.generation++; this.reset()
   }
   private publish() {
@@ -65,10 +69,11 @@ export class ReminderEngine {
     this.snapshot = {
       revision: ++this.revision, phase: this.breaking ? 'break' : this.preferences.started ? 'work' : 'ready',
       settings: structuredClone(this.settings), remainingSeconds: Math.ceil(this.remainingMs / 1000),
-      totalSeconds: (this.breaking ? this.breakTotalMs : this.workMs) / 1000,
+      totalSeconds: (this.breaking ? this.breakTotalMs : this.workTotalMs) / 1000,
       pauseReasons: this.reasons(), pauseUntil: this.preferences.manualPaused ? this.preferences.pauseUntil : null, preReminderVisible: this.preVisible,
-      lastInPeriod: Boolean(schedule.endAt && this.clock.now().getTime() + this.remainingMs >= schedule.endAt.getTime()),
+      lastInPeriod: !this.breaking && Boolean(schedule.endAt && this.clock.now().getTime() + this.remainingMs >= schedule.endAt.getTime()),
       nextWorkAt: schedule.nextAt?.toISOString() ?? null,
+      plannedBreakSeconds: (this.breaking || this.preparing) ? this.breakTotalMs / 1000 : this.settings.breakMinutes * 60,
       storageError: this.storageError, displayError: this.displayError, preparingBreak: this.preparing,
     }
     for (const listener of this.listeners) listener()
@@ -90,10 +95,11 @@ export class ReminderEngine {
   }
   tick() {
     const mono = this.clock.monotonic(), wall = this.clock.now().getTime()
-    const elapsed = Math.max(0, mono - this.lastMono)
+    let elapsed = Math.max(0, mono - this.lastMono)
+    const wasPaused = this.preferences.manualPaused
     const discontinuity = elapsed > 15_000 || Math.abs(wall - this.lastWall - elapsed) > 5000
     this.lastMono = mono; this.lastWall = wall
-    if (this.expirePause()) { this.publish(); return }
+    if (this.expirePause() && !this.breaking) elapsed = 0
     const allowed = getScheduleState(this.settings, this.clock.now()).allowed
     if (allowed !== this.scheduleAllowed) {
       this.scheduleAllowed = allowed
@@ -102,16 +108,17 @@ export class ReminderEngine {
     }
     // Sleep, throttling, or a wall clock jump must not cause a surprise full-screen break.
     // A manual pause already freezes the countdown, so a sleep during that pause must not refill it.
-    if (discontinuity && !this.preferences.manualPaused) { this.interrupt('interrupted'); this.publish(); return }
+    if (discontinuity && (this.breaking || this.preparing || !wasPaused)) { this.interrupt('interrupted'); this.publish(); return }
     if (this.preVisible && mono >= this.preUntil) this.preVisible = false
     if (this.breaking) {
+      this.breakElapsedMs += Math.min(elapsed, this.remainingMs)
       this.remainingMs = Math.max(0, this.remainingMs - elapsed)
       if (this.remainingMs === 0) this.interrupt('completed')
     } else if (this.preferences.started && !this.reasons().length && !this.preparing) {
       this.remainingMs = Math.max(0, this.remainingMs - elapsed)
       const scheduleEnd = getScheduleState(this.settings, this.clock.now()).endAt
       const lastInPeriod = Boolean(scheduleEnd && wall + this.remainingMs >= scheduleEnd.getTime())
-      if (!lastInPeriod && !this.preSent && this.settings.preReminder && this.settings.workMinutes > 1 && this.remainingMs <= 60_000 && this.remainingMs > 0) {
+      if (!lastInPeriod && !this.preSent && this.settings.preReminder && this.workTotalMs > 60_000 && this.remainingMs <= 60_000 && this.remainingMs > 0) {
         this.preSent = true; this.preVisible = true; this.preUntil = mono + 12_000
       }
       if (!lastInPeriod && this.remainingMs === 0) this.requestBreak(false)
@@ -140,10 +147,11 @@ export class ReminderEngine {
     if (command === 'startBreak') this.requestBreak(true)
     if (command === 'endBreak') { if (this.breaking || this.preparing) this.interrupt('skipped') }
     if (command === 'snooze' && (this.breaking || this.preparing)) {
-      this.interrupt('skipped')
+      this.interrupt('snoozed')
       this.preferences.started = true
       this.clearManualPause()
-      this.remainingMs = 5 * 60_000
+      this.workTotalMs = 5 * 60_000
+      this.remainingMs = this.workTotalMs
       this.preSent = false
       this.preVisible = false
     }
@@ -152,6 +160,7 @@ export class ReminderEngine {
   }
   private requestBreak(manual: boolean) {
     if (this.breaking || this.preparing || this.system.size || (!manual && this.reasons().length)) return
+    this.breakTotalMs = this.settings.breakMinutes * 60_000; this.breakElapsedMs = 0
     this.generation++; this.preparing = true; this.preVisible = false; this.displayError = false
     this.manualBreakOutside = manual && !this.scheduleAllowed
   }
@@ -159,13 +168,13 @@ export class ReminderEngine {
   confirmBreak(generation: number) {
     if (generation !== this.generation || !this.preparing || this.system.size || (!this.manualBreakOutside && !this.scheduleAllowed)) return false
     this.breaking = true; this.preparing = false
-    this.breakTotalMs = this.settings.breakMinutes * 60_000; this.remainingMs = this.breakTotalMs
+    this.remainingMs = this.breakTotalMs
     this.markTime()
-    this.emit({ version: 1, type: 'break.started', id: `${this.sessionId}:${generation}`, at: this.clock.now().toISOString() })
+    this.emit({ version: 2, type: 'break.started', id: `${this.sessionId}:${generation}`, at: this.clock.now().toISOString(), plannedSeconds: this.breakTotalMs / 1000, actualSeconds: 0 })
     this.publish(); return true
   }
   failBreak(generation: number) {
-    if (generation !== this.generation) return
+    if (generation !== this.generation || (!this.breaking && !this.preparing)) return
     this.interrupt('display_failed'); this.displayError = true; this.publish()
   }
   setSystemPause(reason: 'locked' | 'suspended' | 'updating', active: boolean) {
@@ -182,6 +191,9 @@ export class ReminderEngine {
     else if (reset && !this.breaking) { this.interrupt('interrupted') }
     if (!settings.preReminder) this.preVisible = false
     this.markTime(); this.publish()
+  }
+  shutdown() {
+    if (this.breaking || this.preparing) { this.interrupt('interrupted'); this.publish() }
   }
   setStorageError(value: boolean) { this.storageError = value; this.publish() }
   setLoginItem(openAtLogin: boolean, chosen: boolean) { this.preferences.openAtLogin = openAtLogin; this.preferences.loginItemChosen = chosen }

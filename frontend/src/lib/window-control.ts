@@ -1,30 +1,21 @@
 interface ControlEvent {
   button?: number
+  detail: number
   preventDefault(): void
   stopPropagation(): void
 }
 
-/**
- * Frameless macOS drag regions deliver mousedown (so :active sticks) and then
- * swallow mouseup, so click never runs. Act on mousedown and ignore the click
- * that follows. Keyboard activation has no mousedown, so click still runs.
- */
+/** Native drag regions may swallow mouseup/click. Mouse activates on down;
+ * keyboard and accessibility clicks (detail 0) activate on click. Event detail
+ * survives React rerenders and does not swallow the next keyboard activation. */
 export function windowControlHandlers(action: () => void) {
-  let fromMouse = false
   return {
     onMouseDown(event: ControlEvent) {
       if ((event.button ?? 0) !== 0) return
-      event.preventDefault()
-      event.stopPropagation()
-      fromMouse = true
-      action()
+      event.preventDefault(); event.stopPropagation(); action()
     },
     onClick(event: ControlEvent) {
-      if (fromMouse) {
-        fromMouse = false
-        event.preventDefault()
-        return
-      }
+      if (event.detail !== 0) { event.preventDefault(); return }
       action()
     },
   }

@@ -174,6 +174,63 @@ describe('native reminder engine', () => {
     engine.command('snooze')
     expect(engine.snapshot.phase).toBe('work')
     expect(engine.snapshot.remainingSeconds).toBe(300)
-    expect(events.at(-1)?.outcome).toBe('skipped')
+    expect(events.at(-1)?.outcome).toBe('snoozed')
   })
+})
+
+describe('reminder lifecycle edge cases', () => {
+  it('does not count an unobserved long gap as a completed voluntary break during manual pause', () => {
+    const { engine, jump } = setup()
+    const events: BreakEvent[] = []; engine.onEvent(event => events.push(event))
+    engine.command('pause'); engine.command('startBreak'); engine.confirmBreak(engine.generation)
+    jump(10 * 60_000)
+    expect(engine.snapshot.phase).not.toBe('break')
+    expect(engine.snapshot.pauseReasons).toContain('manual')
+    expect(events.at(-1)?.outcome).toBe('interrupted')
+  })
+  it('starts a complete five-minute snooze cycle even with a one-minute configured interval', () => {
+    const prefs = freshPreferences(); prefs.settings.workMinutes = 1
+    const { engine, advance } = setup(prefs)
+    engine.command('startBreak'); engine.confirmBreak(engine.generation); engine.command('snooze')
+    expect(engine.snapshot.totalSeconds).toBe(300)
+    expect(engine.snapshot.remainingSeconds).toBe(300)
+    advance(240_000)
+    expect(engine.snapshot.preReminderVisible).toBe(true)
+    advance(60_000); expect(engine.snapshot.preparingBreak).toBe(true)
+  })
+  it('ignores stale failure callbacks after a break already ended', () => {
+    const { engine } = setup()
+    engine.command('startBreak'); engine.confirmBreak(engine.generation); engine.command('endBreak')
+    engine.failBreak(engine.generation)
+    expect(engine.snapshot.displayError).toBe(false)
+  })
+  it('continues warnings across adjacent work ranges that have no actual rest gap', () => {
+    const prefs = freshPreferences(); prefs.settings.workMinutes = 30; prefs.settings.schedule.enabled = true
+    prefs.settings.schedule.ranges = [{ start: '09:00', end: '09:30' }, { start: '09:30', end: '18:00' }]
+    const { engine, advance } = setup(prefs)
+    engine.command('start'); advance(29 * 60_000)
+    expect(engine.snapshot.preReminderVisible).toBe(true)
+  })
+})
+
+describe('observed break records', () => {
+  it('records the original planned duration and only observed display time, once per break', () => {
+    const { engine, advance } = setup(); const events: BreakEvent[] = []
+    engine.onEvent(event => events.push(event))
+    engine.command('startBreak'); engine.confirmBreak(engine.generation); advance(12_000)
+    engine.updateSettings({ ...engine.snapshot.settings, breakMinutes: 5 }); engine.command('snooze'); engine.command('endBreak')
+    expect(events).toHaveLength(2)
+    expect(events[1]).toMatchObject({ version: 2, plannedSeconds: 180, actualSeconds: 12, outcome: 'snoozed' })
+    expect(events[1].id).toBe(events[0].id)
+  })
+})
+
+it('records a normal quit as interruption once without changing the manual pause preference', () => {
+  const { engine, advance } = setup(); const events: BreakEvent[] = []
+  engine.onEvent(event => events.push(event))
+  engine.command('pause'); engine.command('startBreak'); engine.confirmBreak(engine.generation); advance(5000)
+  engine.shutdown(); engine.shutdown()
+  expect(events).toHaveLength(2)
+  expect(events.at(-1)).toMatchObject({ outcome: 'interrupted', actualSeconds: 5 })
+  expect(engine.getPreferences().manualPaused).toBe(true)
 })
