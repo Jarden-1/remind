@@ -132,7 +132,7 @@ Mac 当前配置同时构建 arm64／x64 的 DMG 与 ZIP；Windows 构建 x64 NS
 
 已完成：v0.1.5 本地 102 项自动测试、TypeScript 检查、独立前端与桌面生产构建、计时／存储／更新／IPC 快照竞态的自动测试；Mac arm64 本地打包及真实界面验证，包括原生看板、设置入口、多屏休息显示、Esc 退出、关闭看板后后台计时、重复启动恢复同一计时、保存设置与重启后保留手动暂停，以及正式打包页面使用本地文件加载。使用 ad-hoc 签名的 Mac arm64／x64 DMG、ZIP 和 `latest-mac.yml` 已生成。
 
-双屏覆盖修正已在当前 Mac arm64 应用中复验：1920×1080（0, 0）与 1512×982（220, 1080），两块屏均为 2× 缩放。显示后原生窗口、内容区与对应 display.bounds 完全一致；Esc 结束整轮并恢复原看板。看板两个操作等宽，底栏贴合窗口高度。[看板截图](previews/desktop-panel-aligned.jpg) · [休息窗口截图](previews/desktop-break-fullscreen.jpg)。Mac arm64／x64 测试安装包随当前源码重新生成；GitHub Actions 手动构建提供两平台测试包。打上与 `package.json` 相同的版本标签后，工作流把ad-hoc（或凭证齐全时正式签名）的 Mac 安装包及 Windows 安装包放进 Release 草稿，仍需维护者手动发布。
+双屏覆盖修正已在 Mac arm64 应用中复验：1920×1080（0, 0）与 1512×982（220, 1080），两块屏均为 2× 缩放。显示后原生窗口、内容区与对应 display.bounds 完全一致；Esc 结束整轮并恢复原看板。当前看板两个操作等宽，底栏已删除。[当前看板](previews/panel-polished-native.png) · [精简休息页](previews/break-minimal.jpg)。上次验证的 Mac arm64／x64 安装包早于最新会议与界面实现，需从最终源码重新打包；GitHub Actions 手动构建可生成两平台测试包。打上与 `package.json` 相同的版本标签后，工作流把 ad-hoc（或凭证齐全时正式签名）的 Mac 安装包及 Windows 安装包放进 Release 草稿，仍需维护者手动发布。
 
 生产依赖审计为 0；构建依赖链有 8 项 moderate 报告，来自 sprintf-js 经 roarr/global-agent 传入的工具依赖链。2026-10-15 查询时上游尚无修复版本，未强制降级打包器或覆盖为不兼容日志库。[上游公告](https://github.com/advisories/GHSA-hp3w-g68c-fv3c)。
 
