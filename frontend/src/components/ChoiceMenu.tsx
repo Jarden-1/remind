@@ -22,17 +22,29 @@ export function ChoiceMenu({ open, anchor, above, alignEnd, onClose, children }:
     place()
     const first = menu.current.querySelector<HTMLButtonElement>('[aria-checked="true"]') ?? menu.current.querySelector<HTMLButtonElement>('[role^="menuitem"]')
     first?.focus()
+    const resize = new ResizeObserver(place)
+    resize.observe(menu.current)
     window.addEventListener('resize', place); window.addEventListener('scroll', place, true)
-    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true) }
+    return () => { resize.disconnect(); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true) }
   }, [open, anchor, above, alignEnd])
   if (!open) return null
   return createPortal(<div ref={menu} className="choice-menu" role="menu" data-choice style={{ position: 'fixed', left: position.left, top: position.top, right: 'auto', bottom: 'auto', maxHeight: 'calc(100dvh - 16px)', overflowY: 'auto' }} onKeyDown={event => {
-    if (event.key === 'Escape' || event.key === 'Tab') {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation() }
+    if (event.key === 'Escape') {
+      event.preventDefault(); event.stopPropagation()
+      anchor.current?.querySelector<HTMLButtonElement>('button')?.focus(); onClose(); return
+    }
+    if (event.key === 'Tab') {
+      const custom = menu.current?.querySelector<HTMLInputElement>('input')
+      const target = event.target as HTMLElement
+      if (custom && target.matches('[role^="menuitem"]') && !event.shiftKey) { event.preventDefault(); custom.focus(); return }
+      if (custom && target === custom && event.shiftKey) { event.preventDefault(); [...(menu.current?.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]:not(:disabled)') ?? [])].at(-1)?.focus(); return }
+      if (custom && (target === custom || (target.matches('[type="submit"]') && event.shiftKey))) return
+      if (event.shiftKey) event.preventDefault()
       anchor.current?.querySelector<HTMLButtonElement>('button')?.focus(); onClose(); return
     }
     if (event.target instanceof HTMLInputElement) return
-    const buttons = [...(menu.current?.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]') ?? [])]
+    const buttons = [...(menu.current?.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]:not(:disabled)') ?? [])]
+    if (!buttons.length) return
     let index = buttons.indexOf(document.activeElement as HTMLButtonElement)
     if (event.key === 'ArrowDown') index = (index + 1) % buttons.length
     else if (event.key === 'ArrowUp') index = (index + buttons.length - 1) % buttons.length

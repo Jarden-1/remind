@@ -13,7 +13,7 @@ export interface PanelArea { x: number; y: number; width: number; height: number
 export function panelBounds(area: PanelArea, anchor: { x: number; y: number }, platform: string, settingsOpen: boolean): PanelArea {
   const gap = 8
   const width = Math.max(1, Math.min(368, area.width - gap * 2))
-  const height = Math.max(1, Math.min(settingsOpen ? 740 : 464, area.height - gap * 2))
+  const height = Math.max(1, Math.min(settingsOpen ? 740 : 440, area.height - gap * 2))
   return {
     width, height,
     x: Math.round(Math.max(area.x + gap, Math.min(anchor.x - width / 2, area.x + area.width - width - gap))),

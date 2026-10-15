@@ -5,24 +5,30 @@ export function toMinutes(value: string) {
   return hours * 60 + minutes
 }
 
-export function validateSettings(settings: ReminderSettings): string | null {
+export interface SettingsIssue { field: 'workMinutes' | 'breakMinutes' | 'theme' | 'days' | 'ranges'; message: string; index?: number; part?: 'start' | 'end' }
+
+export function getSettingsIssue(settings: ReminderSettings): SettingsIssue | null {
   if (!Number.isInteger(settings.workMinutes) || settings.workMinutes < 1 || settings.workMinutes > 240)
-    return '提醒间隔需要是 1–240 之间的整数。'
+    return { field: 'workMinutes', message: '请输入 1–240 的整数' }
   if (!Number.isInteger(settings.breakMinutes) || settings.breakMinutes < 1 || settings.breakMinutes > 30)
-    return '休息时长需要是 1–30 之间的整数。'
-  if (!['system', 'light', 'dark'].includes(settings.theme)) return '请选择有效的外观。'
+    return { field: 'breakMinutes', message: '请输入 1–30 的整数' }
+  if (!['system', 'light', 'dark'].includes(settings.theme)) return { field: 'theme', message: '请选择有效的外观' }
   if (!settings.schedule.days.length || settings.schedule.days.some(day => !Number.isInteger(day) || day < 0 || day > 6))
-    return '请至少选择一个工作日。'
-  if (!settings.schedule.ranges.length) return '请至少添加一个工作时段。'
-  const ranges = [...settings.schedule.ranges].sort((a, b) => a.start.localeCompare(b.start))
+    return { field: 'days', message: '请至少选择一个工作日' }
+  if (!settings.schedule.ranges.length || settings.schedule.ranges.length > 12) return { field: 'ranges', message: '请设置 1–12 个工作时段' }
+  const ranges = settings.schedule.ranges.map((range, index) => ({ ...range, index })).sort((a, b) => a.start.localeCompare(b.start))
   for (let index = 0; index < ranges.length; index++) {
-    const { start, end } = ranges[index]
-    if (![start, end].every(value => /^([01]\d|2[0-3]):[0-5]\d$/.test(value))) return '请填写完整的开始和结束时间。'
-    if (toMinutes(start) >= toMinutes(end)) return '结束时间需要晚于开始时间；跨午夜请拆成两个时段。'
-    if (index > 0 && toMinutes(start) < toMinutes(ranges[index - 1].end)) return '工作时段有重叠，请调整后保存。'
+    const { start, end, index: originalIndex } = ranges[index]
+    for (const part of ['start', 'end'] as const) {
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(ranges[index][part])) return { field: 'ranges', index: originalIndex, part, message: '请填写完整的开始和结束时间' }
+    }
+    if (toMinutes(start) >= toMinutes(end)) return { field: 'ranges', index: originalIndex, part: 'end', message: '结束需晚于开始，跨午夜请拆成两个时段' }
+    if (index > 0 && toMinutes(start) < toMinutes(ranges[index - 1].end)) return { field: 'ranges', index: originalIndex, part: 'start', message: '时段有重叠，请调整后保存' }
   }
   return null
 }
+
+export function validateSettings(settings: ReminderSettings): string | null { return getSettingsIssue(settings)?.message ?? null }
 
 export function getScheduleState(settings: ReminderSettings, now: Date) {
   if (!settings.schedule.enabled) return { allowed: true, endAt: null, nextAt: null }

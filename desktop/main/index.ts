@@ -1,4 +1,4 @@
-import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, powerMonitor, screen, shell, Tray, type IpcMainInvokeEvent } from 'electron'
+import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, powerMonitor, screen, shell, systemPreferences, Tray, type IpcMainInvokeEvent } from 'electron'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
@@ -47,7 +47,7 @@ let recoveryTimer: ReturnType<typeof setTimeout> | undefined
 let loginItem: LoginItemState = { openAtLogin: false, status: 'unsupported', approvalNeeded: false, message: null }
 let panelSettingsOpen = false
 const panelWidth = 368
-const panelHeight = 464
+const panelHeight = 440
 
 function state(): DesktopState { return { revision: ++stateRevision, reminder: engine.snapshot, update: updates.snapshot, launchAtLogin: loginItem.openAtLogin, loginItem } }
 function broadcast() {
@@ -259,7 +259,7 @@ function syncWindows() {
   if (!s.preparingBreak && s.phase !== 'break') closeBreakWindows()
   if (s.preReminderVisible && !notice) {
     const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
-    const created = makeWindow('notice', { width: 330, height: 96, x: area.x + area.width - 346, y: area.y + 16, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true })
+    const created = makeWindow('notice', { width: 260, height: 56, x: area.x + area.width - 276, y: area.y + 16, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true })
     notice = created.window
     notice.on('closed', () => { notice = null })
     void created.load().then(() => { if (engine.snapshot.preReminderVisible && !created.window.isDestroyed()) created.window.showInactive() }).catch(error => log.error(error))
@@ -330,7 +330,11 @@ function setupIpc() {
     const action = z.enum(['ignore', 'permissions', 'refresh']).parse(input)
     if (action === 'ignore') meetings?.ignore()
     else if (action === 'refresh') await meetings?.checkNow()
-    else if (process.platform === 'darwin') await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility')
+    else if (process.platform === 'darwin') {
+      // Register the running app in the OS authorization flow, rather than leaving users to guess which app to add.
+      systemPreferences.isTrustedAccessibilityClient(true)
+      await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility')
+    }
   })
   ipcMain.handle('remind:ready', event => { trusted(event); readiness.get(event.sender.id)?.(); readiness.delete(event.sender.id) })
 }

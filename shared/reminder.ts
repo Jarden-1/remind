@@ -1,5 +1,7 @@
 /** Shared desktop / renderer contract. No Electron or React dependencies. */
 export type Theme = 'system' | 'light' | 'dark'
+/** A brief heads-up; the one-minute lead time is independent of this display duration. */
+export const PRE_REMINDER_DISPLAY_MS = 5_000
 import type { MeetingState } from './meeting'
 export interface TimeRange { start: string; end: string }
 export interface ReminderSettings {

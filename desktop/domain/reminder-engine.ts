@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, type PauseReason, type ReminderSettings, type ReminderSnapshot } from '../../shared/reminder'
+import { DEFAULT_SETTINGS, PRE_REMINDER_DISPLAY_MS, type PauseReason, type ReminderSettings, type ReminderSnapshot } from '../../shared/reminder'
 import type { Preferences, ReminderCommand } from '../../shared/desktop'
 import { getScheduleState } from '../../shared/schedule'
 
@@ -123,7 +123,7 @@ export class ReminderEngine {
       const scheduleEnd = getScheduleState(this.settings, this.clock.now()).endAt
       const lastInPeriod = Boolean(scheduleEnd && wall + this.remainingMs >= scheduleEnd.getTime())
       if (!lastInPeriod && !this.preSent && this.settings.preReminder && this.workTotalMs > 60_000 && this.remainingMs <= 60_000 && this.remainingMs > 0) {
-        this.preSent = true; this.preVisible = true; this.preUntil = mono + 12_000
+        this.preSent = true; this.preVisible = true; this.preUntil = mono + PRE_REMINDER_DISPLAY_MS
       }
       if (!lastInPeriod && this.remainingMs === 0) this.requestBreak(false)
     }

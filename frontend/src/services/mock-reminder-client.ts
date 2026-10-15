@@ -1,6 +1,7 @@
 import { type ReminderClient, type ReminderSettings, type ReminderSnapshot, type PreviewControls } from '../contracts/reminder'
 import { getScheduleState, validateSettings } from '../domain/schedule'
 import { freshPreferences, type PreferenceStore, type SavedPreferences } from './storage'
+import { PRE_REMINDER_DISPLAY_MS } from '../../../shared/reminder'
 
 interface Clock { now(): Date; monotonic(): number }
 const browserClock: Clock = { now: () => new Date(), monotonic: () => performance.now() }
@@ -95,7 +96,7 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
         else if (!this.snapshot.lastInPeriod) this.beginBreak()
       } else if (!this.isBreak && this.prefs.settings.preReminder && !this.preSent &&
         this.workTotalMs > 60_000 && this.remainingMs <= 60_000 && !this.snapshot.lastInPeriod) {
-        this.preSent = true; this.preVisible = true; this.preHideAt = now + 12_000
+        this.preSent = true; this.preVisible = true; this.preHideAt = now + PRE_REMINDER_DISPLAY_MS
       }
     }
     this.publish()

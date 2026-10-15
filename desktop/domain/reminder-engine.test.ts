@@ -9,6 +9,17 @@ function setup(overrides: Partial<ReturnType<typeof freshPreferences>> = {}) {
   return { engine, advance, jump, clockJump: (ms: number) => { wall += ms; engine.tick() } }
 }
 describe('native reminder engine', () => {
+  it('automatically closes the heads-up after five seconds without cancelling or repeating the scheduled break', () => {
+    const { engine, advance } = setup()
+    engine.command('start'); advance(44 * 60_000)
+    expect(engine.snapshot.preReminderVisible).toBe(true)
+    advance(4_000); expect(engine.snapshot.preReminderVisible).toBe(true)
+    advance(1_000); expect(engine.snapshot.preReminderVisible).toBe(false)
+    expect(engine.snapshot.remainingSeconds).toBe(55)
+    advance(54_000); expect(engine.snapshot.preReminderVisible).toBe(false)
+    expect(engine.snapshot.preparingBreak).toBe(false)
+    advance(1_000); expect(engine.snapshot.preparingBreak).toBe(true)
+  })
   it('holds manual pause across ticks and restart, keeping it independent of lock and suspend', () => {
     const { engine, advance } = setup()
     engine.command('start'); advance(75_000); engine.command('pause')

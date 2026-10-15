@@ -12,6 +12,16 @@ function setup(startAt = new Date(2026, 9, 12, 10, 0)) {
 }
 
 describe('preview reminder state', () => {
+  it('auto-dismisses the heads-up after five seconds and keeps the one-minute break deadline', async () => {
+    const { client, advance } = setup()
+    await client.start(); advance(44 * 60_000)
+    expect(client.getSnapshot().preReminderVisible).toBe(true)
+    advance(4_000); expect(client.getSnapshot().preReminderVisible).toBe(true)
+    advance(1_000); expect(client.getSnapshot().preReminderVisible).toBe(false)
+    expect(client.getSnapshot().remainingSeconds).toBe(55)
+    advance(54_000); expect(client.getSnapshot().preReminderVisible).toBe(false)
+    advance(1_000); expect(client.getSnapshot().phase).toBe('break')
+  })
   it('resets a paused countdown to the full interval and keeps counting', async () => {
     const { client, advance } = setup()
     await client.start(); advance(5 * 60_000); await client.pause()
