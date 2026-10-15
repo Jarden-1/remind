@@ -16,7 +16,7 @@ if (process.platform === 'darwin') {
   const wpf = join(framework, 'WPF')
   const executable = join(directory, 'meeting-probe.exe')
   if (!existsSync(join(framework, 'csc.exe'))) throw new Error('.NET Framework C# compiler is required')
-  execFileSync(join(framework, 'csc.exe'), ['/nologo', '/codepage:65001', '/optimize+', '/platform:x64', '/target:exe', `/out:${executable}`, `/reference:${join(wpf, 'UIAutomationClient.dll')}`, `/reference:${join(wpf, 'UIAutomationTypes.dll')}`, `/reference:${join(wpf, 'WindowsBase.dll')}`, `/reference:${join(framework, 'System.Web.Extensions.dll')}`, 'desktop/native/meetings/MeetingProbe.cs'], { stdio: 'inherit' })
+  execFileSync(join(framework, 'csc.exe'), ['/nologo', '/codepage:65001', '/optimize+', '/platform:x64', '/target:exe', `/out:${executable}`, `/reference:${join(wpf, 'UIAutomationClient.dll')}`, `/reference:${join(wpf, 'UIAutomationTypes.dll')}`, `/reference:${join(wpf, 'WindowsBase.dll')}`, `/reference:${join(framework, 'System.Web.Extensions.dll')}`, resolve('desktop/native/meetings/MeetingProbe.cs')], { stdio: 'inherit' })
   execFileSync(executable, ['--self-test'], { stdio: 'inherit' })
 } else {
   console.log('Native meeting probe unsupported on this platform')
