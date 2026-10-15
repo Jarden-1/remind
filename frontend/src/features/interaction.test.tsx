@@ -98,6 +98,32 @@ describe('actual React controls', () => {
     expect(open).toHaveBeenCalledTimes(2); expect(notify).toHaveBeenCalledWith('无法打开系统设置')
     expect(document.querySelector('.meeting-setting input')?.getAttribute('role')).toBe('switch')
   })
+  it('offers permission setup before ignore and rechecks on return without assuming permission was granted', async () => {
+    client.getSnapshot().settings.meetingPause = true
+    client.getSnapshot().meeting = { status: 'unknown', apps: [], permission: 'required', message: '需要辅助功能权限' }
+    const open = vi.fn(async () => {})
+    const refresh = vi.fn(async () => { await client.updateSettings({ ...client.getSnapshot().settings }) })
+    Object.assign(client, { openMeetingPermissions: open, refreshMeeting: refresh })
+    await act(async () => root.render(<Harness />))
+    const actions = [...document.querySelectorAll('.pause-context button')].map(button => button.textContent)
+    expect(actions).toEqual(['去开启', '本次忽略'])
+    await click(button('去开启'))
+    expect(open).toHaveBeenCalledOnce()
+    expect(document.querySelector('.meeting-permission')).not.toBeNull()
+    await act(async () => window.dispatchEvent(new Event('focus')))
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(document.querySelector('.meeting-permission')).toBeNull()
+    expect(client.getSnapshot().settings.meetingPause).toBe(true)
+  })
+  it('reports a failed permission settings action from the panel and keeps it retryable', async () => {
+    client.getSnapshot().settings.meetingPause = true
+    client.getSnapshot().meeting = { status: 'unknown', apps: [], permission: 'required', message: '需要辅助功能权限' }
+    const open = vi.fn(async () => { throw new Error('无法打开系统设置') })
+    Object.assign(client, { openMeetingPermissions: open })
+    await act(async () => root.render(<Harness />))
+    await click(button('去开启')); await click(button('去开启'))
+    expect(open).toHaveBeenCalledTimes(2); expect(notify).toHaveBeenCalledWith('无法打开系统设置')
+  })
 })
 
 it('removes an open portal menu when a break starts', async () => {

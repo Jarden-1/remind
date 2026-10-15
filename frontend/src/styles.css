@@ -244,6 +244,8 @@ input[type='number']::-webkit-inner-spin-button, input[type='number']::-webkit-o
 .meeting-details { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding-bottom: 8px; }
 .meeting-details .helper { flex-basis: 100%; }
 .pause-context .text-button { margin-left: 8px; }
+.meeting-permission { font-weight: 500; }
+.meeting-ignore { color: var(--muted); font-size: 11px; }
 
 kbd { font: inherit; border: 1px solid var(--border); border-radius: 4px; padding: 2px 5px; margin: 0 3px; }
 @keyframes notice-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
