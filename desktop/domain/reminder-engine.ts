@@ -5,6 +5,7 @@ import { getScheduleState } from '../../shared/schedule'
 export interface Clock { monotonic(): number; now(): Date }
 export type { BreakEvent } from '../../shared/break-events'
 import type { BreakEvent, BreakOutcome } from '../../shared/break-events'
+import { disabledMeetingState, type MeetingState } from '../../shared/meeting'
 export const freshPreferences = (): Preferences => ({ settings: structuredClone(DEFAULT_SETTINGS), started: false, manualPaused: false, openAtLogin: true, loginItemChosen: false, pauseUntil: null })
 
 /** The main process is the sole clock. Renderers only send intent and display snapshots. */
@@ -28,6 +29,8 @@ export class ReminderEngine {
   private revision = 0
   private storageError = false
   private displayError = false
+  private meeting: MeetingState = disabledMeetingState()
+  private manualBreak = false
   private manualBreakOutside = false
   private sessionId = globalThis.crypto.randomUUID()
   private pauseExpired = false
@@ -75,6 +78,7 @@ export class ReminderEngine {
       nextWorkAt: schedule.nextAt?.toISOString() ?? null,
       plannedBreakSeconds: (this.breaking || this.preparing) ? this.breakTotalMs / 1000 : this.settings.breakMinutes * 60,
       storageError: this.storageError, displayError: this.displayError, preparingBreak: this.preparing,
+      meeting: structuredClone(this.meeting),
     }
     for (const listener of this.listeners) listener()
   }
@@ -159,14 +163,15 @@ export class ReminderEngine {
     this.markTime(); this.publish()
   }
   private requestBreak(manual: boolean) {
-    if (this.breaking || this.preparing || this.system.size || (!manual && this.reasons().length)) return
+    if (this.breaking || this.preparing || this.system.size || this.reasons().includes('meeting') || (!manual && this.reasons().length)) return
     this.breakTotalMs = this.settings.breakMinutes * 60_000; this.breakElapsedMs = 0
     this.generation++; this.preparing = true; this.preVisible = false; this.displayError = false
+    this.manualBreak = manual
     this.manualBreakOutside = manual && !this.scheduleAllowed
   }
   /** Only native window readiness can begin the break; renderer commands cannot. */
   confirmBreak(generation: number) {
-    if (generation !== this.generation || !this.preparing || this.system.size || (!this.manualBreakOutside && !this.scheduleAllowed)) return false
+    if (generation !== this.generation || !this.preparing || this.system.size || this.reasons().includes('meeting') || (!this.manualBreakOutside && !this.scheduleAllowed)) return false
     this.breaking = true; this.preparing = false
     this.remainingMs = this.breakTotalMs
     this.markTime()
@@ -196,5 +201,19 @@ export class ReminderEngine {
     if (this.breaking || this.preparing) { this.interrupt('interrupted'); this.publish() }
   }
   setStorageError(value: boolean) { this.storageError = value; this.publish() }
+  get automaticBreakPending() { return this.preparing && !this.manualBreak }
+  deferAutomaticBreak() {
+    if (!this.automaticBreakPending) return false
+    this.interrupt('interrupted'); this.markTime(); this.publish(); return true
+  }
+  setMeeting(state: MeetingState) {
+    const before = this.reasons().includes('meeting')
+    this.meeting = structuredClone(state)
+    // Unknown after a confirmed call stays paused; unknown before a call only degrades automatic overlays.
+    const after = state.apps.length > 0 && state.status !== 'ignored' && state.status !== 'disabled'
+    if (after) this.system.add('meeting'); else this.system.delete('meeting')
+    if (before !== after) { this.interrupt('interrupted'); this.markTime() }
+    this.publish()
+  }
   setLoginItem(openAtLogin: boolean, chosen: boolean) { this.preferences.openAtLogin = openAtLogin; this.preferences.loginItemChosen = chosen }
 }

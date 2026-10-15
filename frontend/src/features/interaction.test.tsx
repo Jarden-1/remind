@@ -79,6 +79,25 @@ describe('actual React controls', () => {
     expect(document.querySelector('.toast')?.textContent).toBe('后台暂不可用')
     expect(document.querySelector('.break-screen')).not.toBeNull()
   })
+  it('keeps meeting detection in the draft until the user saves', async () => {
+    const close = vi.fn()
+    await act(async () => root.render(<Settings settings={client.getSnapshot().settings} client={client} onClose={close} notify={notify} playSound={() => {}} />))
+    const row = [...document.querySelectorAll('label')].find(label => label.textContent?.includes('会议自动暂停'))!
+    await click(row.querySelector('input')!)
+    expect(client.getSnapshot().settings.meetingPause).toBe(false)
+    await click(button('保存设置'))
+    expect(client.getSnapshot().settings.meetingPause).toBe(true); expect(close).toHaveBeenCalledOnce()
+  })
+  it('keeps permission failures visible and allows retry without losing the meeting setting', async () => {
+    client.getSnapshot().settings.meetingPause = true
+    client.getSnapshot().meeting = { status: 'unknown', apps: [], permission: 'required', message: '需要辅助功能权限' }
+    const open = vi.fn(async () => { throw new Error('无法打开系统设置') })
+    Object.assign(client, { openMeetingPermissions: open })
+    await act(async () => root.render(<Settings settings={client.getSnapshot().settings} client={client} onClose={() => {}} notify={notify} playSound={() => {}} />))
+    await click(button('打开辅助功能设置')); await click(button('打开辅助功能设置'))
+    expect(open).toHaveBeenCalledTimes(2); expect(notify).toHaveBeenCalledWith('无法打开系统设置')
+    expect(document.querySelector('.meeting-setting input')?.getAttribute('role')).toBe('switch')
+  })
 })
 
 it('removes an open portal menu when a break starts', async () => {

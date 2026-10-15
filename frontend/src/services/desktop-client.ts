@@ -60,5 +60,8 @@ export class DesktopClient implements ReminderClient, UpdateClient, ShellClient 
   quit = () => this.bridge.quit()
   resetTimer = () => this.command('resetTimer')
   snooze = () => this.command('snooze')
+  ignoreMeeting = () => this.bridge.meeting('ignore')
+  openMeetingPermissions = () => this.bridge.meeting('permissions')
+  refreshMeeting = () => this.bridge.meeting('refresh')
   dispose() { this.unsubscribe(); this.listeners.clear() }
 }

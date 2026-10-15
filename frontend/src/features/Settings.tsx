@@ -6,6 +6,7 @@ import { Toggle } from '../components/Toggle'
 import { validateSettings } from '../domain/schedule'
 import { ScheduleEditor } from './ScheduleEditor'
 import { SoftwareUpdate } from './SoftwareUpdate'
+import { MeetingSettings } from './MeetingSettings'
 import { windowControlHandlers } from '../lib/window-control'
 import type { ShellClient, UpdateClient } from '../services/desktop-client'
 
@@ -60,7 +61,7 @@ export function Settings({ settings, client, onClose, notify, playSound, updates
         <button className="icon-button window-close" aria-label="退出 remind" title="退出" {...windowControlHandlers(() => void shell.quit().catch(error => notify(errorMessage(error))))}><X size={16} strokeWidth={1.8} /></button>
       </div>}
     </header>
-    <fieldset className="settings-scroll" disabled={saving} aria-label="提醒设置选项">
+    <div className="settings-scroll"><fieldset className="settings-fields" disabled={saving} aria-label="提醒设置选项">
       <section className="settings-section"><h2><Clock3 size={15} />时间与提醒</h2>
         <div className="field-heading"><label htmlFor="work-minutes">提醒间隔</label><span>分钟</span></div>
         <div className="duration-row"><div className="presets">{[30, 45, 60].map(value => <button key={value} className={draft.workMinutes === value ? 'selected' : ''} aria-pressed={draft.workMinutes === value} onClick={() => update('workMinutes', value)}>{value}</button>)}</div><input id="work-minutes" aria-label="自定义提醒间隔，分钟" type="number" min="1" max="240" step="1" value={Number.isNaN(draft.workMinutes) ? '' : draft.workMinutes} onChange={event => update('workMinutes', event.target.valueAsNumber)} /></div>
@@ -71,12 +72,12 @@ export function Settings({ settings, client, onClose, notify, playSound, updates
       </section>
       <section className="settings-section"><h2><CalendarDays size={15} />工作时段与会议</h2>
         <ScheduleEditor value={draft.schedule} onChange={value => update('schedule', value)} />
-        <div className="future-setting"><div><span className="setting-label">会议自动暂停</span><span className="helper">腾讯会议、飞书会议</span></div><span className="subtle-badge">待接入</span></div>
+        <MeetingSettings client={client} enabled={draft.meetingPause} onChange={value => update('meetingPause', value)} notify={notify} />
       </section>
       <section className="settings-section appearance-section"><h2><Sun size={15} />外观</h2><div className="theme-picker">{([{ value: 'system', label: '跟随系统', icon: Monitor }, { value: 'light', label: '浅色', icon: Sun }, { value: 'dark', label: '深色', icon: Moon }] as { value: Theme; label: string; icon: typeof Sun }[]).map(({ value, label, icon: Icon }) => <button key={value} className={draft.theme === value ? 'selected' : ''} aria-pressed={draft.theme === value} onClick={() => update('theme', value)}><Icon size={15} />{label}</button>)}</div></section>
       {shell && <section className="settings-section"><h2><Power size={15} />系统</h2><LaunchAtLogin shell={shell} notify={notify} /></section>}
       {updates && <SoftwareUpdate client={updates} />}
-    </fieldset>
+    </fieldset></div>
     <footer className="settings-footer">{error && <p className="form-error" role="alert">{error}</p>}<div><button className="button secondary" disabled={saving} onClick={onClose}>取消</button><button className="button primary" disabled={saving} onClick={() => void save()}><Check size={16} />{saving ? '保存中…' : '保存设置'}</button></div></footer>
   </section>
 }

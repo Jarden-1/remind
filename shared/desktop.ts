@@ -31,6 +31,7 @@ export interface DesktopBridge {
   setLaunchAtLogin(enabled: boolean): Promise<LaunchAtLoginResult>
   refreshLaunchAtLogin(): Promise<void>
   openLoginItemsSettings(): Promise<void>
+  meeting(action: 'ignore' | 'permissions' | 'refresh'): Promise<void>
 }
 
 declare global { interface Window { remind?: DesktopBridge } }

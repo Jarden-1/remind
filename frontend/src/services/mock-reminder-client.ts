@@ -70,6 +70,7 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
       pauseReasons: this.reasons(), pauseUntil: this.prefs.manualPaused ? this.prefs.pauseUntil : null, preReminderVisible: this.preVisible,
       lastInPeriod: !this.isBreak && this.outsideOverride === null && !!schedule.endAt && this.clock.now().getTime() + this.remainingMs >= schedule.endAt.getTime(),
       nextWorkAt: schedule.nextAt?.toISOString() ?? null, storageError: this.storageError,
+      meeting: { status: this.meeting ? 'active' : this.prefs.settings.meetingPause ? 'inactive' : 'disabled', apps: this.meeting ? ['tencent-meeting'] : [], permission: 'granted', message: null },
     }
     this.listeners.forEach(listener => listener())
   }
@@ -178,6 +179,7 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
     // A preview injects the confirmed signal, without claiming real OS detection.
     this.resetCycle(); this.publish()
   }
+  ignoreMeeting = async () => { this.meeting = false; this.resetCycle(); this.publish() }
   setOutsideSchedule(active: boolean) {
     this.outsideOverride = active; this.previouslyOutside = active
     this.resetCycle(); this.publish()

@@ -234,3 +234,29 @@ it('records a normal quit as interruption once without changing the manual pause
   expect(events.at(-1)).toMatchObject({ outcome: 'interrupted', actualSeconds: 5 })
   expect(engine.getPreferences().manualPaused).toBe(true)
 })
+
+describe('confirmed meeting integration', () => {
+  const active = { status: 'active' as const, apps: ['tencent-meeting' as const], permission: 'granted' as const, message: null }
+  const inactive = { ...active, status: 'inactive' as const, apps: [] }
+  it('interrupts a visible break and cannot be overridden by startBreak or resume', () => {
+    const { engine } = setup(); const events: BreakEvent[] = []; engine.onEvent(event => events.push(event))
+    engine.command('startBreak'); engine.confirmBreak(engine.generation); engine.setMeeting(active)
+    expect(events.at(-1)?.outcome).toBe('interrupted'); expect(engine.snapshot.phase).not.toBe('break')
+    engine.command('resume'); engine.command('startBreak'); expect(engine.snapshot.preparingBreak).toBe(false)
+    expect(engine.snapshot.pauseReasons).toContain('meeting')
+  })
+  it('keeps a manual pause after meeting end and resets the work interval', () => {
+    const { engine, advance } = setup(); engine.command('start'); advance(20000); engine.command('pause'); engine.setMeeting(active)
+    engine.setMeeting(inactive); expect(engine.snapshot.pauseReasons).toEqual(['manual']); expect(engine.snapshot.remainingSeconds).toBe(2700)
+  })
+  it('retains meeting pause for unknown after a call, while unknown before one does not freeze work', () => {
+    const { engine, advance } = setup(); engine.command('start'); engine.setMeeting({ ...inactive, status: 'unknown' }); advance(1000)
+    expect(engine.snapshot.remainingSeconds).toBe(2699); engine.setMeeting(active); engine.setMeeting({ ...active, status: 'unknown' }); advance(2000)
+    expect(engine.snapshot.remainingSeconds).toBe(2700); expect(engine.snapshot.pauseReasons).toContain('meeting')
+  })
+  it('defers only automatic breaks under uncertain detection without a display failure', () => {
+    const { engine, advance } = setup(); engine.command('start'); advance(45 * 60000)
+    expect(engine.deferAutomaticBreak()).toBe(true); expect(engine.snapshot.displayError).toBe(false); expect(engine.snapshot.remainingSeconds).toBe(2700)
+    engine.command('startBreak'); expect(engine.deferAutomaticBreak()).toBe(false); expect(engine.confirmBreak(engine.generation)).toBe(true)
+  })
+})

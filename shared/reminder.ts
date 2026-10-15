@@ -1,5 +1,6 @@
 /** Shared desktop / renderer contract. No Electron or React dependencies. */
 export type Theme = 'system' | 'light' | 'dark'
+import type { MeetingState } from './meeting'
 export interface TimeRange { start: string; end: string }
 export interface ReminderSettings {
   workMinutes: number
@@ -28,6 +29,7 @@ export interface ReminderSnapshot {
   plannedBreakSeconds?: number
   preparingBreak?: boolean
   displayError?: boolean
+  meeting?: MeetingState
 }
 export interface ReminderClient {
   getSnapshot(): ReminderSnapshot
@@ -44,6 +46,9 @@ export interface ReminderClient {
   /** Leave the current break and ask again after five minutes. */
   snooze(): Promise<void>
   updateSettings(settings: ReminderSettings): Promise<void>
+  ignoreMeeting?(): Promise<void>
+  openMeetingPermissions?(): Promise<void>
+  refreshMeeting?(): Promise<void>
 }
 /** Preview controls deliberately stay outside the production UI contract. */
 export interface PreviewControls {

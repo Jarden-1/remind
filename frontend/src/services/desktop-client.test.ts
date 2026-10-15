@@ -22,7 +22,7 @@ describe('desktop bridge bootstrap', () => {
       subscribe: listener => { receive = listener; return unsubscribe },
       command: vi.fn(async () => {}), settings: vi.fn(async () => {}), update: vi.fn(async () => {}), panel: vi.fn(async () => {}), ready: vi.fn(async () => {}),
       minimize: vi.fn(async () => {}), quit: vi.fn(async () => {}), setLaunchAtLogin: vi.fn(async () => ({ openAtLogin: true, message: null, approvalNeeded: false })),
-      refreshLaunchAtLogin: vi.fn(async () => {}), openLoginItemsSettings: vi.fn(async () => {}),
+      refreshLaunchAtLogin: vi.fn(async () => {}), openLoginItemsSettings: vi.fn(async () => {}), meeting: vi.fn(async () => {}),
     }
     const pending = DesktopClient.connect(bridge)
     const fresh = state(3); fresh.reminder.revision = 1; fresh.update.revision = 1
@@ -34,6 +34,8 @@ describe('desktop bridge bootstrap', () => {
     await client.pause(); expect(bridge.command).toHaveBeenCalledWith('pause')
     await client.minimize(); expect(bridge.minimize).toHaveBeenCalledOnce()
     await client.update('download'); expect(bridge.update).toHaveBeenCalledWith('download')
+    await client.ignoreMeeting(); await client.openMeetingPermissions(); await client.refreshMeeting()
+    expect(vi.mocked(bridge.meeting).mock.calls).toEqual([['ignore'], ['permissions'], ['refresh']])
     client.dispose(); expect(unsubscribe).toHaveBeenCalledOnce()
   })
   it('leaves the approval hint in settings instead of raising a toast', async () => {
@@ -43,7 +45,7 @@ describe('desktop bridge bootstrap', () => {
       command: vi.fn(async () => {}), settings: vi.fn(async () => {}), update: vi.fn(async () => {}), panel: vi.fn(async () => {}), ready: vi.fn(async () => {}),
       minimize: vi.fn(async () => {}), quit: vi.fn(async () => {}),
       setLaunchAtLogin: vi.fn(async () => ({ openAtLogin: true, message: 'macOS 需要允许登录项', approvalNeeded: true })),
-      refreshLaunchAtLogin: vi.fn(async () => {}), openLoginItemsSettings: vi.fn(async () => {}),
+      refreshLaunchAtLogin: vi.fn(async () => {}), openLoginItemsSettings: vi.fn(async () => {}), meeting: vi.fn(async () => {}),
     }
     const client = await DesktopClient.connect(bridge)
     expect(await client.setLaunchAtLogin(true)).toBeNull()

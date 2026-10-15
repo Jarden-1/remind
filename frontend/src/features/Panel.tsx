@@ -3,6 +3,7 @@ import { BellOff, BellRing, ChevronDown, Coffee, Minus, Pause, Play, RotateCcw, 
 import type { ReminderClient, ReminderSnapshot } from '../contracts/reminder'
 import { ChoiceMenu } from '../components/ChoiceMenu'
 import { errorMessage } from '../lib/errors'
+import { meetingNames } from '../../../shared/meeting'
 import { Brand } from '../components/Brand'
 import { TimerReadout } from '../components/TimerReadout'
 import { nextWorkLabel } from '../lib/format'
@@ -81,7 +82,8 @@ export function Panel({ snapshot: s, client, onSettings, notify, updates, shell 
   const upcoming = !paused && !ready && s.remainingSeconds <= 60 && s.totalSeconds > 60 && s.settings.preReminder && !s.lastInPeriod
   const title = s.preparingBreak ? '准备休息' : s.phase === 'break' ? '休息中' : systemPaused ? '已暂停' : meeting ? '会议中' : manual ? '已暂停' : outside ? '时段外' : s.lastInPeriod ? '等待下一时段' : ready ? '未开始' : upcoming ? '即将休息' : '计时中'
   const timed = manual && s.pauseUntil ? pauseCountdown(s.pauseUntil) : null
-  const pauseContext = [timed, meeting ? `会议进行中${manual && !timed ? ' · 手动暂停' : ''}` : null, !meeting && outside ? `${nextWorkLabel(s.nextWorkAt)}${manual && !timed ? ' · 手动暂停' : ''}` : null].filter(Boolean).join(' · ') || null
+  const meetingLabel = s.meeting?.apps.length ? s.meeting.apps.map(id => meetingNames[id]).join('、') : '会议进行中'
+  const pauseContext = [timed, meeting ? `${meetingLabel}${manual && !timed ? ' · 手动暂停' : ''}` : null, !meeting && outside ? `${nextWorkLabel(s.nextWorkAt)}${manual && !timed ? ' · 手动暂停' : ''}` : null, s.meeting?.message].filter(Boolean).join(' · ') || null
   const primaryLabel = ready ? '开始提醒' : manual ? (meeting || outside ? '取消手动暂停' : '继续提醒') : paused ? '手动暂停' : '暂停提醒'
   const breakBlocked = meeting || systemPaused || s.preparingBreak || s.phase === 'break'
   function run(action: Promise<void>) { void action.catch(error => notify(errorMessage(error))) }
@@ -168,7 +170,7 @@ export function Panel({ snapshot: s, client, onSettings, notify, updates, shell 
           </ChoiceMenu>
         </div>
       </div>
-      {pauseContext && <p className="pause-context">{pauseContext}</p>}
+      {pauseContext && <div className="pause-context">{pauseContext}{client.ignoreMeeting && ['active', 'unknown', 'confirmation', 'checking'].includes(s.meeting?.status ?? '') && <button className="text-button" onClick={() => run(client.ignoreMeeting!())}>本次忽略</button>}</div>}
       <div className="timer-actions">
         <div className="menu-anchor" data-choice ref={pauseAnchor}>
           <button className="button primary" aria-expanded={menu === 'pause'} aria-haspopup={ready || manual ? undefined : 'menu'} title={ready || manual ? '空格' : '选择暂停时长'} onClick={() => {

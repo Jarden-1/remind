@@ -15,12 +15,13 @@
   ],
   "scripts": {
     "postinstall": "install-electron",
-    "dev": "electron-vite dev",
-    "build": "npm run typecheck && electron-vite build",
+    "dev": "npm run build:native && electron-vite dev",
+    "build": "npm run build:native && npm run typecheck && electron-vite build",
     "typecheck": "tsc -p desktop/tsconfig.json --noEmit && npm run build --workspace frontend",
     "test": "vitest run --config vitest.config.ts && npm run test --workspace frontend",
     "pack": "npm run build && electron-builder --dir --publish never",
-    "dist": "npm run build && electron-builder --publish never"
+    "dist": "npm run build && electron-builder --publish never",
+    "build:native": "node scripts/build-meeting-probe.mjs --universal"
   },
   "dependencies": {
     "electron-log": "5.4.4",

@@ -18,5 +18,6 @@ const bridge: DesktopBridge = {
   setLaunchAtLogin: enabled => ipcRenderer.invoke('remind:launch-at-login', enabled),
   refreshLaunchAtLogin: () => ipcRenderer.invoke('remind:launch-at-login-refresh'),
   openLoginItemsSettings: () => ipcRenderer.invoke('remind:login-item-settings'),
+  meeting: action => ipcRenderer.invoke('remind:meeting', action),
 }
 contextBridge.exposeInMainWorld('remind', bridge)

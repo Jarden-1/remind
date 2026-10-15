@@ -11,3 +11,4 @@ release/
 
 # npm workspaces use the root lockfile.
 frontend/package-lock.json
+desktop/native/bin/

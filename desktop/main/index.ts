@@ -6,6 +6,8 @@ import { existsSync, mkdirSync } from 'node:fs'
 import log from 'electron-log/main'
 import electronUpdater from 'electron-updater'
 import { z } from 'zod'
+import { MeetingService, nativeMeetingProbe } from '../services/meetings/service'
+import { meetingNames } from '../../shared/meeting'
 import { commands, type DesktopView, type DesktopState } from '../../shared/desktop'
 import { settingsSchema } from '../domain/validation'
 import { ReminderEngine } from '../domain/reminder-engine'
@@ -30,6 +32,7 @@ let notice: BrowserWindow | null = null
 let tray: Tray | null = null
 let engine: ReminderEngine
 let updates!: Updates
+let meetings: MeetingService | undefined
 let preferences: PreferencesStore
 let loginItems: LoginItems
 let stateRevision = 0
@@ -99,6 +102,7 @@ function quitApp() {
   clearInterval(tickTimer)
   clearTimeout(recoveryTimer)
   updates?.stop()
+  meetings?.stop()
   app.quit()
 }
 function minimizePanel(target: BrowserWindow) {
@@ -216,6 +220,11 @@ async function prepareBreak(generation: number) {
   closeBreakWindows()
   let timeout: ReturnType<typeof setTimeout> | undefined
   try {
+    await meetings?.checkNow()
+    if (engine.generation !== generation || !engine.snapshot.preparingBreak) return
+    if (meetings && !meetings.allowOverlay && engine.deferAutomaticBreak()) {
+      notifySystem('该起来活动一下了', '会议状态未确认，本次使用静音提醒'); return
+    }
     const displays = screen.getAllDisplays()
     if (!displays.length) throw new Error('No displays available')
     const primary = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
@@ -224,6 +233,11 @@ async function prepareBreak(generation: number) {
     })
     await Promise.race([Promise.all(pending), new Promise<never>((_resolve, reject) => { timeout = setTimeout(() => reject(new Error('Break readiness timed out')), 5000) })])
     engine.tick()
+    await meetings?.checkNow()
+    if (engine.generation !== generation || !engine.snapshot.preparingBreak) return
+    if (meetings && !meetings.allowOverlay && engine.deferAutomaticBreak()) {
+      notifySystem('该起来活动一下了', '会议状态未确认，本次使用静音提醒'); return
+    }
     if (powerMonitor.getSystemIdleState(60) === 'locked') engine.setSystemPause('locked', true)
     if (engine.generation !== generation || !engine.snapshot.preparingBreak) return
     restorePanelAfterBreak = panel?.isVisible() ?? false
@@ -276,6 +290,7 @@ function setupIpc() {
     try { preferences.write({ ...engine.getPreferences(), settings }) }
     catch (error) { engine.setStorageError(true); log.error(error); throw new Error('设置保存失败，请重试') }
     engine.updateSettings(settings); engine.setStorageError(false)
+    meetings?.configure(settings.meetingPause)
   })
   ipcMain.handle('remind:update', async (event, input: unknown) => {
     trusted(event, ['panel'])
@@ -310,6 +325,13 @@ function setupIpc() {
   })
   ipcMain.handle('remind:launch-at-login-refresh', event => { trusted(event, ['panel']); refreshLoginFromOs() })
   ipcMain.handle('remind:login-item-settings', event => { trusted(event, ['panel']); return shell.openExternal(loginItemsSettingsUrl) })
+  ipcMain.handle('remind:meeting', async (event, input: unknown) => {
+    trusted(event, ['panel'])
+    const action = z.enum(['ignore', 'permissions', 'refresh']).parse(input)
+    if (action === 'ignore') meetings?.ignore()
+    else if (action === 'refresh') await meetings?.checkNow()
+    else if (process.platform === 'darwin') await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility')
+  })
   ipcMain.handle('remind:ready', event => { trusted(event); readiness.get(event.sender.id)?.(); readiness.delete(event.sender.id) })
 }
 function loginPlatform(): 'darwin' | 'win32' | null {
@@ -378,7 +400,7 @@ else {
   app.on('second-instance', () => { if (engine) showPanel() })
   app.on('window-all-closed', () => {})
   app.on('activate', () => { if (engine) showPanel() })
-  app.on('before-quit', () => { quitting = true; engine?.shutdown(); clearInterval(tickTimer); clearTimeout(recoveryTimer); updates?.stop() })
+  app.on('before-quit', () => { quitting = true; engine?.shutdown(); clearInterval(tickTimer); clearTimeout(recoveryTimer); updates?.stop(); meetings?.stop() })
   void app.whenReady().then(async () => {
     log.initialize(); log.transports.file.maxSize = 1024 * 1024
     Menu.setApplicationMenu(null)
@@ -407,6 +429,18 @@ else {
     try { history = new HistoryStore(app.getPath('userData')) }
     catch (error) { log.error('History unavailable; reminders remain active', error) }
     engine.onEvent(event => { try { history?.append(event) } catch (error) { log.error('Cannot save break history', error) } })
+    const probe = app.isPackaged ? join(process.resourcesPath, 'native', process.platform === 'win32' ? 'meeting-probe.exe' : 'meeting-probe') : join(app.getAppPath(), 'desktop/native/bin', process.platform === 'win32' ? 'meeting-probe.exe' : 'meeting-probe')
+    meetings = new MeetingService(() => ['darwin', 'win32'].includes(process.platform) ? nativeMeetingProbe(probe) : Promise.resolve({ protocol: 1, permission: 'unsupported', apps: [] }), state => {
+      const wasMeeting = engine.snapshot.pauseReasons.includes('meeting')
+      const previousStatus = engine.snapshot.meeting?.status
+      engine.setMeeting(state)
+      const isMeeting = engine.snapshot.pauseReasons.includes('meeting')
+      if (!quitting && wasMeeting !== isMeeting) {
+        const names = state.apps.map(id => meetingNames[id]).join('、')
+        notifySystem(isMeeting ? '会议中，提醒已暂停' : state.status === 'ignored' || state.status === 'disabled' ? '已停止会议自动暂停' : '会议已结束', isMeeting ? names : engine.snapshot.pauseReasons.length ? '其他暂停仍生效' : '下一轮将重新计时')
+      }
+      if (!quitting && state.status === 'confirmation' && previousStatus !== 'confirmation') notifySystem('会议状态待确认', '提醒仍暂停，可在看板中选择本次忽略')
+    })
     const { autoUpdater } = electronUpdater
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = false
@@ -438,7 +472,7 @@ else {
     })
     updates.arm()
     setupIpc(); setupTray()
-    engine.subscribe(() => { broadcast(); syncWindows() })
+    engine.subscribe(() => { meetings?.suspend(engine.snapshot.pauseReasons.some(reason => reason === 'locked' || reason === 'suspended')); broadcast(); syncWindows() })
     updates.subscribe(() => { engine.setSystemPause('updating', updates?.snapshot.status === 'installing'); broadcast() })
     nativeAutoUpdater.on('before-quit-for-update', () => { quitting = true })
     powerMonitor.on('suspend', () => { clearTimeout(recoveryTimer); engine.setSystemPause('suspended', true) })
@@ -452,6 +486,7 @@ else {
     powerMonitor.on('lock-screen', () => engine.setSystemPause('locked', true))
     powerMonitor.on('unlock-screen', () => engine.setSystemPause('locked', false))
     if (powerMonitor.getSystemIdleState(60) === 'locked') engine.setSystemPause('locked', true)
+    meetings.configure(initial.settings.meetingPause)
     const displaysChanged = () => { refreshBreakDisplays(); if (panel?.isVisible()) placePanel() }
     screen.on('display-added', displaysChanged); screen.on('display-removed', displaysChanged); screen.on('display-metrics-changed', displaysChanged)
     tickTimer = setInterval(() => { engine.tick(); if (engine.takePauseExpired()) persist() }, 250)

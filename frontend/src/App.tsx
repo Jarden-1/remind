@@ -40,7 +40,8 @@ export function App({ client, preview, updates, shell, desktopView, desktopSound
   useEffect(() => {
     const meeting = snapshot.pauseReasons.includes('meeting')
     if (meeting !== previousMeeting.current) {
-      notify(meeting ? `检测到会议，提醒已暂停${preview ? '（模拟）' : ''}` : snapshot.pauseReasons.includes('manual') ? '会议已结束，手动暂停仍生效' : '会议已结束，下一轮将重新计时')
+      const ended = snapshot.meeting?.status === 'ignored' ? '已忽略本次会议识别' : snapshot.meeting?.status === 'disabled' ? '会议自动暂停已关闭' : '会议已结束'
+      notify(meeting ? `检测到会议，提醒已暂停${preview ? '（模拟）' : ''}` : `${ended}${snapshot.pauseReasons.length ? '，其他暂停仍生效' : snapshot.phase === 'ready' ? '' : '，下一轮将重新计时'}`)
       previousMeeting.current = meeting
     }
   }, [snapshot.pauseReasons])
