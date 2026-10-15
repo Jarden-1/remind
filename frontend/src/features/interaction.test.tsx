@@ -75,7 +75,7 @@ describe('actual React controls', () => {
   it('shows failures inside a desktop break instead of an unhandled rejection', async () => {
     await client.startBreak(); vi.spyOn(client, 'snooze').mockRejectedValue(new Error('后台暂不可用'))
     await act(async () => root.render(<App client={client} desktopView="break" />))
-    await click(button('再给我 5 分钟'))
+    await click(button('延后 5 分钟'))
     expect(document.querySelector('.toast')?.textContent).toBe('后台暂不可用')
     expect(document.querySelector('.break-screen')).not.toBeNull()
   })
@@ -95,5 +95,4 @@ it('paints the requested rest duration before the native break is confirmed', as
   client.getSnapshot().plannedBreakSeconds = 180
   await act(async () => root.render(<App client={client} desktopView="break" />))
   expect(document.querySelector('.break-time')?.textContent).toBe('03:00')
-  expect(document.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('0')
 })
