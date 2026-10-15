@@ -237,8 +237,8 @@ input[type='number']::-webkit-inner-spin-button, input[type='number']::-webkit-o
 .brand-small .brand-mark { width: 19px; height: 19px; }
 .break-fullscreen { position: absolute; top: var(--rest-edge); right: var(--rest-edge); color: var(--rest-muted); }
 .break-content { display: flex; flex-direction: column; align-items: center; gap: var(--rest-gap); padding: 80px 24px; width: 100%; text-align: center; }
-.break-content h1 { font-size: clamp(32px, 3vw, 44px); line-height: 1.35; font-weight: 400; letter-spacing: 0.04em; text-wrap: balance; }
-.break-time { color: var(--rest-muted); font-size: 24px; line-height: 1.4; font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+.break-content h1 { font-size: clamp(40px, 4vw, 56px); line-height: 1.35; font-weight: 400; letter-spacing: 0.04em; text-wrap: balance; }
+.break-time { color: var(--rest-muted); font-size: clamp(28px, 2.5vw, 32px); line-height: 1.4; font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
 .break-footer { position: absolute; bottom: var(--rest-edge); left: 24px; right: 24px; display: flex; justify-content: center; gap: 24px; }
 .end-break { min-height: 44px; padding: 0 8px; border: 0; border-radius: 4px; color: var(--rest-muted); background: transparent; font-size: 12px; }
 .end-break:hover { color: var(--rest-ink); text-decoration: underline; text-underline-offset: 4px; }
