@@ -74,8 +74,8 @@ electron-store 提供原子写入。设置额外保存 schemaVersion 并用 Zod 
         ↓ 是
  静音系统通知 + 看板和设置提示
         ↓
- Windows，或已签名的 Mac：用户点击下载 → 校验 → 用户点击重启安装
- 未签名的 Mac：用户点击后打开 GitHub Releases 下载页
+ Windows，或带 Developer ID 的 Mac：用户点击下载 → 校验 → 用户点击重启安装
+ 无 Developer ID 的 Mac（含 ad-hoc）：用户点击后打开 GitHub Releases 下载页
 ```
 
 关键规则：
@@ -84,7 +84,7 @@ electron-store 提供原子写入。设置额外保存 schemaVersion 并用 Zod 
 - 正式包在启动约 15 秒后检查一次，之后每 6 小时检查一次。自动检查失败不改界面状态，也不显示成“已是最新版本”。
 - 发现新版本只通知，不下载。同一版本不重复通知。设置中的“检查更新”仍然可用，手动检查失败会显示原因并可重试。
 - Windows 走应用内下载和安装。下载显示百分比，下载完成后仍等待用户点击重启安装。
-- 未签名的 macOS 包不能通过 Squirrel.Mac 完成应用内安装。启动时用 `codesign` 查看是否带有 Developer ID Application 签名；没有时，新版本提示改为打开固定的 GitHub Releases 页面，不调用应用内下载或安装。已签名的 Mac 包仍使用应用内流程。
+- 无 Developer ID 签名的 macOS 包不能通过 Squirrel.Mac 完成应用内安装。启动时用 `codesign` 查看是否带有 Developer ID Application 签名；没有时，新版本提示改为打开固定的 GitHub Releases 页面，不调用应用内下载或安装。带 Developer ID 的 Mac 包仍使用应用内流程。
 - 休息、准备覆盖、锁屏、休眠、会议和更新安装期间拒绝安装，保留已下载结果。安装期间暂停提醒；用户手动暂停意图保留。
 - 重复点击检查、下载、安装不会重复发起同一操作。失败显示可重试状态，不能误报“最新版本”；可转到公开版本页手动下载。
 - 不允许预发布版本或降级。更新源固定为公开的 `Jarden-1/remind` Releases，客户端不包含 GitHub token。自动检查只看已发布版本，看不到草稿。
@@ -112,7 +112,7 @@ Mac 当前配置同时构建 arm64／x64 的 DMG 与 ZIP；Windows 构建 x64 NS
 
 1. 手动运行：执行测试和构建，产物保存为 Actions artifacts，不发布。
 2. 推送与根目录 package.json 版本相同的 `vX.Y.Z` 标签：两个平台都成功后，把 DMG、ZIP、NSIS 和更新元数据上传到 GitHub Release **草稿**。版本不匹配直接失败。没有 Developer ID 凭证时，Mac 使用 ad-hoc 签名（`mac.identity: "-"`），构建日志会打印 `codesign --verify --deep --strict` 和 `spctl` 的结果；凭证齐全时改用该证书签名，Mac 同时公证。只配置了一部分凭证也会失败，避免发出半签名包。
-3. 草稿不会自动公开。维护者检查两个平台的安装包和更新元数据后，在 GitHub 上发布该草稿。应用内更新只看已发布的版本。macOS 在线更新仍需要签名，未签名 ZIP 不能当作已验收的自动更新。
+3. 草稿不会自动公开。维护者检查两个平台的安装包和更新元数据后，在 GitHub 上发布该草稿。应用内更新只看已发布的版本。macOS 在线更新仍需要签名，ad-hoc ZIP 不能当作已验收的自动更新。
 
 仓库 Secrets：
 
@@ -130,9 +130,9 @@ Mac 当前配置同时构建 arm64／x64 的 DMG 与 ZIP；Windows 构建 x64 NS
 
 ## 4. 验证与待完成事项
 
-已完成：v0.1.5 本地 102 项自动测试、TypeScript 检查、独立前端与桌面生产构建、计时／存储／更新／IPC 快照竞态的自动测试；Mac arm64 本地打包及真实界面验证，包括原生看板、设置入口、多屏休息显示、Esc 退出、关闭看板后后台计时、重复启动恢复同一计时、保存设置与重启后保留手动暂停，以及正式打包页面使用本地文件加载。未签名的 Mac arm64／x64 DMG、ZIP 和 `latest-mac.yml` 已生成。
+已完成：v0.1.5 本地 102 项自动测试、TypeScript 检查、独立前端与桌面生产构建、计时／存储／更新／IPC 快照竞态的自动测试；Mac arm64 本地打包及真实界面验证，包括原生看板、设置入口、多屏休息显示、Esc 退出、关闭看板后后台计时、重复启动恢复同一计时、保存设置与重启后保留手动暂停，以及正式打包页面使用本地文件加载。使用 ad-hoc 签名的 Mac arm64／x64 DMG、ZIP 和 `latest-mac.yml` 已生成。
 
-双屏覆盖修正已在当前 Mac arm64 应用中复验：1920×1080（0, 0）与 1512×982（220, 1080），两块屏均为 2× 缩放。显示后原生窗口、内容区与对应 display.bounds 完全一致；Esc 结束整轮并恢复原看板。看板两个操作等宽，底栏贴合窗口高度。[看板截图](previews/desktop-panel-aligned.jpg) · [休息窗口截图](previews/desktop-break-fullscreen.jpg)。Mac arm64／x64 测试安装包随当前源码重新生成；GitHub Actions 手动构建提供两平台测试包。打上与 `package.json` 相同的版本标签后，工作流把未签名（或已配置凭证时已签名）的安装包放进 Release 草稿，仍需维护者手动发布。
+双屏覆盖修正已在当前 Mac arm64 应用中复验：1920×1080（0, 0）与 1512×982（220, 1080），两块屏均为 2× 缩放。显示后原生窗口、内容区与对应 display.bounds 完全一致；Esc 结束整轮并恢复原看板。看板两个操作等宽，底栏贴合窗口高度。[看板截图](previews/desktop-panel-aligned.jpg) · [休息窗口截图](previews/desktop-break-fullscreen.jpg)。Mac arm64／x64 测试安装包随当前源码重新生成；GitHub Actions 手动构建提供两平台测试包。打上与 `package.json` 相同的版本标签后，工作流把ad-hoc（或凭证齐全时正式签名）的 Mac 安装包及 Windows 安装包放进 Release 草稿，仍需维护者手动发布。
 
 生产依赖审计为 0；构建依赖链有 8 项 moderate 报告，来自 sprintf-js 经 roarr/global-agent 传入的工具依赖链。2026-10-15 查询时上游尚无修复版本，未强制降级打包器或覆盖为不兼容日志库。[上游公告](https://github.com/advisories/GHSA-hp3w-g68c-fv3c)。
 
