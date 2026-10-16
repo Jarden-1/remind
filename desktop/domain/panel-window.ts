@@ -10,6 +10,11 @@ export function shouldHidePanel(platform: string, visible: boolean) {
 
 
 export interface PanelArea { x: number; y: number; width: number; height: number }
+/** A tray click has its own toggle handler; native controls inside the panel can also take focus. */
+export function shouldDismissPanelOnBlur(point: { x: number; y: number }, panel: PanelArea, tray: PanelArea | undefined, settingsOpen: boolean) {
+  const inside = (area: PanelArea) => point.x >= area.x && point.x < area.x + area.width && point.y >= area.y && point.y < area.y + area.height
+  return !settingsOpen && !inside(panel) && (!tray || !inside(tray))
+}
 export const DEFAULT_PANEL_HEIGHT = 378
 export function panelBounds(area: PanelArea, anchor: { x: number; y: number }, platform: string, settingsOpen: boolean, contentHeight = DEFAULT_PANEL_HEIGHT): PanelArea {
   const gap = 8

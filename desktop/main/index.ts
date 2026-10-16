@@ -14,7 +14,7 @@ import { ReminderEngine } from '../domain/reminder-engine'
 import { PreferencesStore, HistoryStore } from '../services/preferences'
 import { macNativeUpdateSupported } from '../services/code-signature'
 import { Updates, type UpdatePort } from '../services/updates'
-import { shouldHidePanel, panelBounds, DEFAULT_PANEL_HEIGHT, fitPanelHeight } from '../domain/panel-window'
+import { shouldHidePanel, shouldDismissPanelOnBlur, panelBounds, DEFAULT_PANEL_HEIGHT, fitPanelHeight } from '../domain/panel-window'
 import { trayPresentation } from '../domain/tray-status'
 import { TrayHover } from '../domain/tray-hover'
 import { classifyInstallLocation, desiredOpenAtLogin, launchedHidden, loginItemsSettingsUrl, LoginItems, type LoginItemState } from '../services/login-item'
@@ -140,6 +140,11 @@ function openPanel(reveal: boolean) {
       if (!created.window.isDestroyed()) created.window.destroy()
     })
     panel.on('close', event => { if (!quitting) { event.preventDefault(); panel?.hide() } })
+    panel.on('blur', () => {
+      const window = created.window
+      if (quitting || window.isDestroyed() || !window.isVisible()) return
+      if (shouldDismissPanelOnBlur(screen.getCursorScreenPoint(), window.getBounds(), tray?.getBounds(), panelSettingsOpen)) window.hide()
+    })
     panel.on('focus', () => {
       if (loginRefreshRequired) { loginRefreshRequired = false; refreshLoginFromOs(true) }
       void meetings?.checkNow()

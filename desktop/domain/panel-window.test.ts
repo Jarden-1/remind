@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { shouldHidePanel } from './panel-window'
+import { shouldHidePanel, shouldDismissPanelOnBlur } from './panel-window'
 
 describe('panel conceal', () => {
+  const panel = { x: -500, y: 32, width: 368, height: 378 }
+  const tray = { x: -350, y: 0, width: 80, height: 24 }
+  it('dismisses the dashboard on an outside click, including a different display', () => {
+    expect(shouldDismissPanelOnBlur({ x: -501, y: 200 }, panel, tray, false)).toBe(true)
+    expect(shouldDismissPanelOnBlur({ x: 1200, y: 200 }, panel, tray, false)).toBe(true)
+  })
+  it('leaves tray clicks to the toggle handler so blur cannot close then reopen the panel', () => {
+    expect(shouldDismissPanelOnBlur({ x: -310, y: 12 }, panel, tray, false)).toBe(false)
+    expect(shouldDismissPanelOnBlur({ x: -350, y: 0 }, panel, tray, false)).toBe(false)
+  })
+  it('keeps native controls inside the card and the settings editor open', () => {
+    expect(shouldDismissPanelOnBlur({ x: -300, y: 200 }, panel, tray, false)).toBe(false)
+    expect(shouldDismissPanelOnBlur({ x: 1200, y: 200 }, panel, tray, true)).toBe(false)
+  })
   it('hides a macOS panel even when minimize reports success', () => {
     expect(shouldHidePanel('darwin', true)).toBe(true)
     expect(shouldHidePanel('darwin', false)).toBe(true)
