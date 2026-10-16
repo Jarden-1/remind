@@ -93,6 +93,21 @@ jobs:
             echo "$signature"
             echo "== codesign verify: $app =="
             codesign --verify --deep --strict --verbose=2 "$app"
+            # Exercise the installed native module with the packaged Electron
+            # runtime where the runner can execute this app's architecture.
+            if lipo -verify_arch "$(uname -m)" "$app/Contents/MacOS/remind" >/dev/null 2>&1; then
+              ELECTRON_RUN_AS_NODE=1 "$app/Contents/MacOS/remind" -e '
+                const probe = require(process.argv[1]);
+                if (!probe.selfTest()) process.exit(1);
+                const timeout = setTimeout(() => process.exit(1), 10000);
+                probe.observe().then(raw => {
+                  const value = JSON.parse(raw);
+                  if (value.protocol !== 1 || !Array.isArray(value.apps)) throw new Error("Invalid native protocol");
+                  clearTimeout(timeout);
+                  console.log("Packaged native module passed");
+                }).catch(error => { console.error(error); process.exit(1); });
+              ' "$app/Contents/Resources/native/meeting-probe.node"
+            fi
             echo "== spctl: $app =="
             if [[ "$signature" == *"Authority=Developer ID Application:"* ]]; then
               spctl --assess --type execute --verbose=4 "$app"

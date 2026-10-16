@@ -11,7 +11,7 @@ if (process.platform === 'darwin') {
   const headers = resolve('node_modules/node-api-headers/include')
   for (const arch of architectures) {
     execFileSync('xcrun', ['swiftc', '-O', '-emit-library', '-sdk', sdk, '-target', `${arch}-apple-macos14.0`, '-framework', 'AppKit', '-framework', 'ApplicationServices', '-Xlinker', '-install_name', '-Xlinker', '@rpath/libmeeting-probe.dylib', 'desktop/native/meetings/MeetingProbe.swift', '-o', join(directory, `libmeeting-probe-${arch}.dylib`)], { stdio: 'inherit' })
-    execFileSync('xcrun', ['clang++', '-std=c++17', '-dynamiclib', '-undefined', 'dynamic_lookup', '-arch', arch, '-mmacosx-version-min=14.0', '-isysroot', sdk, '-I', headers, '-D', 'NAPI_VERSION=8', '-D', 'NODE_GYP_MODULE_NAME=meeting_probe', 'desktop/native/meetings/MeetingAddon.cc', join(directory, `libmeeting-probe-${arch}.dylib`), '-Wl,-rpath,@loader_path', '-o', join(directory, `meeting-probe-${arch}.node`)], { stdio: 'inherit' })
+    execFileSync('xcrun', ['clang++', '-std=c++17', '-dynamiclib', '-undefined', 'dynamic_lookup', '-arch', arch, '-mmacosx-version-min=14.0', '-isysroot', sdk, '-I', headers, '-D', 'NAPI_VERSION=8', '-D', 'NODE_GYP_MODULE_NAME=meeting_probe', 'desktop/native/meetings/MeetingAddon.cc', join(directory, `libmeeting-probe-${arch}.dylib`), '-Wl,-rpath,@loader_path', '-Wl,-install_name,@rpath/meeting-probe.node', '-o', join(directory, `meeting-probe-${arch}.node`)], { stdio: 'inherit' })
   }
   for (const [name, parts] of [
     ['libmeeting-probe.dylib', architectures.map(arch => join(directory, `libmeeting-probe-${arch}.dylib`))],
