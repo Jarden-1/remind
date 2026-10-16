@@ -14,6 +14,7 @@
     "frontend"
   ],
   "scripts": {
+    "clean": "node scripts/clean.mjs",
     "postinstall": "install-electron",
     "dev": "npm run build:native && electron-vite dev",
     "build": "npm run build:native && npm run typecheck && electron-vite build",

@@ -34,6 +34,8 @@ npm run dist
 
 `pack` 输出测试应用目录，`dist` 输出当前操作系统的安装包，均不上传。文件位于 `release/`。GitHub Actions 在没有 Developer ID 凭证时仍会打出 Mac 和 Windows 安装包，并为 Mac 应用做 ad-hoc 签名；推送 `vX.Y.Z` 标签后上传到 Release 草稿，需要维护者手动发布。配齐签名凭证后，同一次构建改用 Developer ID 签名（Mac 还会公证），不再使用 ad-hoc。
 
+停止开发运行后，执行 `npm run clean` 可清除本地构建、旧安装包、原生编译产物和测试／Vite 缓存；保留源码、依赖和用户设置。下次 `npm run dev` 或 `npm run build` 会重新生成所需产物。
+
 ## 安装未签名的 Mac 包
 
 没有 Developer ID 时，安装包带有 ad-hoc 签名。第一次打开时，macOS 会提示无法验证开发者。在访达中右键 remind.app，选择“打开”。如果仍然出现“remind.app 已损坏，无法打开”，在终端执行：
