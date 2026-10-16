@@ -30,7 +30,7 @@ export function ScheduleEditor({ value, onChange, issue }: { value: Schedule; on
 
   return <div className="schedule-settings">
     <Toggle label="限定工作时段" description="时段外不提醒" checked={value.enabled} onChange={enabled => onChange({ ...value, enabled })} />
-    <div className="schedule-editor">
+    {(value.enabled || issue?.field === 'days' || issue?.field === 'ranges') && <div className="schedule-editor">
       <p className="field-caption">重复日期</p>
       <div className="schedule-presets" aria-label="工作日期快捷选项">
         {PRESETS.map(preset => <button key={preset.value} title={preset.description} aria-pressed={mode === preset.value}
@@ -58,6 +58,6 @@ export function ScheduleEditor({ value, onChange, issue }: { value: Schedule; on
       </div>{issue?.field === 'ranges' && issue.index === index && <p className="field-error" id={`range-${index}-error`} role="alert">{issue.message}</p>}</div>)}
       <button className="text-button" disabled={value.ranges.length >= 12} onClick={() => edit({ ranges: [...value.ranges, { start: '', end: '' }] })}><Plus size={14} />添加时段</button>
       {issue?.field === 'ranges' && issue.index === undefined && <p className="field-error" role="alert">{issue.message}</p>}
-    </div>
+    </div>}
   </div>
 }

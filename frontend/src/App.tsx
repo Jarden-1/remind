@@ -47,6 +47,22 @@ export function App({ client, preview, updates, shell, desktopView, desktopSound
     wasBreak.current = isBreak
   }, [snapshot.phase, snapshot.settings.sound])
   useEffect(() => { if (desktopView === 'panel') void window.remind?.panel(settingsOpen).catch(error => notify(errorMessage(error))) }, [settingsOpen, desktopView])
+  useEffect(() => {
+    if (desktopView !== 'panel' || settingsOpen || !window.remind) return
+    const content = document.querySelector<HTMLElement>('.panel-content')
+    const header = document.querySelector<HTMLElement>('.panel > .window-header')
+    if (!content || !header) return
+    let previous = 0
+    const measure = () => {
+      const height = Math.ceil(content.getBoundingClientRect().height + header.getBoundingClientRect().height)
+      if (height === previous) return
+      previous = height
+      void window.remind?.resizePanel(height).catch(error => notify(errorMessage(error)))
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(content); observer.observe(header); measure()
+    return () => observer.disconnect()
+  }, [desktopView, settingsOpen])
   useEffect(() => { if (desktopView) void window.remind?.ready().catch(error => notify(errorMessage(error))) }, [desktopView])
   useEffect(() => {
     const meeting = snapshot.pauseReasons.includes('meeting')

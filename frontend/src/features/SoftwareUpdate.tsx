@@ -25,7 +25,7 @@ export function SoftwareUpdate({ client }: { client: UpdateClient }) {
     try { await client.update(action) } catch { setError('操作失败，请重试') }
   }
   return <section className="settings-section software-update">
-    <h2><RefreshCw size={15} />软件更新{waiting && <span className="update-dot" aria-label="有可用更新" />}<span className="version-label">v{update.currentVersion}</span></h2>
+    <h2>软件更新{waiting && <span className="update-dot" aria-label="有可用更新" />}<span className="version-label">v{update.currentVersion}</span></h2>
     <div className="update-row">
       <span className="helper" role="status">{description}</span>
       <span className="update-actions">

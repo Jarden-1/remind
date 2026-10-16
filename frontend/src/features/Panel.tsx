@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Check, ChevronDown, Minus, Pause, Play, RotateCcw, Settings2, X } from 'lucide-react'
+import { Check, ChevronDown, Minus, Settings2, X } from 'lucide-react'
 import type { ReminderClient, ReminderSnapshot } from '../contracts/reminder'
 import { ChoiceMenu } from '../components/ChoiceMenu'
 import { errorMessage } from '../lib/errors'
@@ -162,13 +162,12 @@ export function Panel({ snapshot: s, client, onSettings, notify, updates, shell 
       <div className="window-controls">
         <button className="icon-button" disabled={changing} aria-label="打开设置" title="设置" {...windowControlHandlers(onSettings)}><Settings2 size={16} strokeWidth={1.8} /></button>
         {shell && <>
-          <span className="window-divider" aria-hidden="true" />
           <button className="icon-button" aria-label="最小化" title="最小化" {...windowControlHandlers(() => run(shell.minimize()))}><Minus size={16} strokeWidth={1.8} /></button>
           <button className="icon-button window-close" aria-label="退出 remind" title="退出" {...windowControlHandlers(() => run(shell.quit()))}><X size={16} strokeWidth={1.8} /></button>
         </>}
       </div>
     </header>
-    <div className="panel-body">
+    <div className="panel-scroll"><div className="panel-content"><div className="panel-body">
       <div className="timer-heading">
         <h1>距离下次休息</h1>
         <div className="timer-heading-tools">
@@ -188,7 +187,7 @@ export function Panel({ snapshot: s, client, onSettings, notify, updates, shell 
           </ChoiceMenu>
         </div>
         <div className="menu-anchor" data-choice ref={breakAnchor}>
-          <button disabled={changing} aria-expanded={menu === 'break'} aria-haspopup="menu" aria-label={`休息时长 ${s.settings.breakMinutes} 分钟`} onClick={() => setMenu(menu === 'break' ? null : 'break')}><span className="rest-dot" />休息 <strong>{s.settings.breakMinutes} 分钟</strong><ChevronDown size={12} /></button>
+          <button disabled={changing} aria-expanded={menu === 'break'} aria-haspopup="menu" aria-label={`休息时长 ${s.settings.breakMinutes} 分钟`} onClick={() => setMenu(menu === 'break' ? null : 'break')}>休息 <strong>{s.settings.breakMinutes} 分钟</strong><ChevronDown size={12} /></button>
           <ChoiceMenu open={menu === 'break'} anchor={breakAnchor} onClose={() => setMenu(null)} alignEnd>
             <MinuteChoices minutes={s.settings.breakMinutes} max={30} presets={[1, 3, 5]} label="自定义休息分钟" pending={changing} onApply={value => void applyMinutes('break', value)} />
           </ChoiceMenu>
@@ -205,7 +204,7 @@ export function Panel({ snapshot: s, client, onSettings, notify, updates, shell 
             else if (manual) run(client.resume())
             else setMenu(menu === 'pause' ? null : 'pause')
           }}>
-            {ready || manual ? <Play size={15} fill="currentColor" strokeWidth={1.5} /> : <Pause size={15} fill="currentColor" strokeWidth={1.5} />}{primaryLabel}
+            {primaryLabel}
           </button>
           <ChoiceMenu open={menu === 'pause'} anchor={pauseAnchor} onClose={() => setMenu(null)} above>
             <button role="menuitem" onClick={() => { setMenu(null); run(client.pauseFor('30')) }}>30 分钟</button>
@@ -214,11 +213,12 @@ export function Panel({ snapshot: s, client, onSettings, notify, updates, shell 
             <button role="menuitem" onClick={() => { setMenu(null); run(client.pauseFor('indefinite')) }}>一直暂停</button>
           </ChoiceMenu>
         </div>
-        <button className="button secondary" title="重置时间 (R)" disabled={changing || s.preparingBreak} onClick={() => run(client.resetTimer())}><RotateCcw size={15} strokeWidth={1.6} />重置时间</button>
+        <button className="button secondary" title="重置时间 (R)" disabled={changing || s.preparingBreak} onClick={() => run(client.resetTimer())}>重置时间</button>
       </div>
     </div>
     {updates && <UpdateNotice client={updates} notify={notify} />}
     {s.storageError && <p className="storage-warning" role="alert">本地设置无法读取或保存，当前使用临时设置。</p>}
     {s.displayError && <p className="storage-warning" role="alert">休息窗口未能打开，请重试。</p>}
+    </div></div>
   </section>
 }

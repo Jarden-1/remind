@@ -25,6 +25,7 @@ export interface DesktopBridge {
   settings(settings: ReminderSettings): Promise<void>
   update(action: 'check' | 'download' | 'install' | 'releases'): Promise<void>
   panel(settingsOpen: boolean): Promise<void>
+  resizePanel(contentHeight: number): Promise<void>
   ready(): Promise<void>
   minimize(): Promise<void>
   quit(): Promise<void>

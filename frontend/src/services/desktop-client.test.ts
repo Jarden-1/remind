@@ -20,7 +20,7 @@ describe('desktop bridge bootstrap', () => {
     const bridge: DesktopBridge = {
       state: () => new Promise(resolve => { initial = resolve }),
       subscribe: listener => { receive = listener; return unsubscribe },
-      command: vi.fn(async () => {}), settings: vi.fn(async () => {}), update: vi.fn(async () => {}), panel: vi.fn(async () => {}), ready: vi.fn(async () => {}),
+      command: vi.fn(async () => {}), settings: vi.fn(async () => {}), update: vi.fn(async () => {}), panel: vi.fn(async () => {}), resizePanel: vi.fn(async () => {}), ready: vi.fn(async () => {}),
       minimize: vi.fn(async () => {}), quit: vi.fn(async () => {}), setLaunchAtLogin: vi.fn(async () => ({ openAtLogin: true, message: null, approvalNeeded: false })),
       refreshLaunchAtLogin: vi.fn(async () => {}), openLoginItemsSettings: vi.fn(async () => {}), meeting: vi.fn(async () => {}),
     }
@@ -42,7 +42,7 @@ describe('desktop bridge bootstrap', () => {
     const bridge: DesktopBridge = {
       state: async () => state(1),
       subscribe: () => () => {},
-      command: vi.fn(async () => {}), settings: vi.fn(async () => {}), update: vi.fn(async () => {}), panel: vi.fn(async () => {}), ready: vi.fn(async () => {}),
+      command: vi.fn(async () => {}), settings: vi.fn(async () => {}), update: vi.fn(async () => {}), panel: vi.fn(async () => {}), resizePanel: vi.fn(async () => {}), ready: vi.fn(async () => {}),
       minimize: vi.fn(async () => {}), quit: vi.fn(async () => {}),
       setLaunchAtLogin: vi.fn(async () => ({ openAtLogin: true, message: 'macOS 需要允许登录项', approvalNeeded: true })),
       refreshLaunchAtLogin: vi.fn(async () => {}), openLoginItemsSettings: vi.fn(async () => {}), meeting: vi.fn(async () => {}),

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { ArrowLeft, CalendarDays, Check, Clock3, Minus, Monitor, Moon, Plus, Power, Sun, Volume2, X } from 'lucide-react'
+import { ArrowLeft, Minus, Volume2, X } from 'lucide-react'
 import type { ReminderClient, ReminderSettings, Theme } from '../contracts/reminder'
 import { errorMessage } from '../lib/errors'
 import { Toggle } from '../components/Toggle'
@@ -76,26 +76,27 @@ export function Settings({ settings, client, onClose, notify, playSound, updates
       </div>}
     </header>
     <div className="settings-scroll"><fieldset className="settings-fields" disabled={saving} aria-label="提醒设置选项">
-      <section className="settings-section"><h2><Clock3 size={15} />时间与提醒</h2>
-        <div className="field-heading"><label htmlFor="work-minutes">提醒间隔</label><span>分钟</span></div>
-        <div className="duration-row"><div className="presets">{[30, 45, 60].map(value => <button key={value} className={draft.workMinutes === value ? 'selected' : ''} aria-pressed={draft.workMinutes === value} onClick={() => update('workMinutes', value)}>{value}</button>)}</div><input id="work-minutes" aria-label="自定义提醒间隔，分钟" aria-invalid={issue?.field === 'workMinutes'} aria-describedby={issue?.field === 'workMinutes' ? 'work-error' : undefined} type="number" min="1" max="240" step="1" value={Number.isNaN(draft.workMinutes) ? '' : draft.workMinutes} onChange={event => update('workMinutes', event.target.valueAsNumber)} /></div>
+      <section className="settings-section"><h2>时间</h2>
+        <div className="duration-field"><label htmlFor="work-minutes">提醒间隔</label><div className="duration-control"><input id="work-minutes" aria-label="自定义提醒间隔，分钟" aria-invalid={issue?.field === 'workMinutes'} aria-describedby={issue?.field === 'workMinutes' ? 'work-error' : undefined} type="number" min="1" max="240" step="1" value={Number.isNaN(draft.workMinutes) ? '' : draft.workMinutes} onChange={event => update('workMinutes', event.target.valueAsNumber)} /><span>分钟</span></div></div>
         {issue?.field === 'workMinutes' && <p id="work-error" className="field-error" role="alert">{issue.message}</p>}
-        <div className="break-duration"><div><label htmlFor="break-minutes">休息时长</label></div><div className="stepper"><button aria-label="减少休息时长" disabled={draft.breakMinutes <= 1} onClick={() => update('breakMinutes', Math.max(1, (draft.breakMinutes || 1) - 1))}><Minus size={14} /></button><input id="break-minutes" aria-invalid={issue?.field === 'breakMinutes'} aria-describedby={issue?.field === 'breakMinutes' ? 'break-error' : undefined} type="number" min="1" max="30" value={Number.isNaN(draft.breakMinutes) ? '' : draft.breakMinutes} onChange={event => update('breakMinutes', event.target.valueAsNumber)} /><span>分</span><button aria-label="增加休息时长" disabled={draft.breakMinutes >= 30} onClick={() => update('breakMinutes', Math.min(30, (draft.breakMinutes || 0) + 1))}><Plus size={14} /></button></div></div>
+        <div className="duration-field"><label htmlFor="break-minutes">休息时长</label><div className="duration-control"><input id="break-minutes" aria-invalid={issue?.field === 'breakMinutes'} aria-describedby={issue?.field === 'breakMinutes' ? 'break-error' : undefined} type="number" min="1" max="30" value={Number.isNaN(draft.breakMinutes) ? '' : draft.breakMinutes} onChange={event => update('breakMinutes', event.target.valueAsNumber)} /><span>分钟</span></div></div>
         {issue?.field === 'breakMinutes' && <p id="break-error" className="field-error" role="alert">{issue.message}</p>}
+      </section>
+      <section className="settings-section"><h2>提醒</h2>
         <Toggle label="提前 1 分钟提醒" description="显示 5 秒后自动关闭" checked={draft.preReminder} onChange={value => update('preReminder', value)} />
         <Toggle label="休息铃声" description="开始时响一次" checked={draft.sound} onChange={value => update('sound', value)} />
         {draft.sound && <button className="text-button sound-test" onClick={playSound}><Volume2 size={14} />试听铃声</button>}
       </section>
-      <section className="settings-section"><h2><CalendarDays size={15} />工作时段</h2>
+      <section className="settings-section"><h2>工作时段</h2>
         <ScheduleEditor value={draft.schedule} issue={issue} onChange={value => update('schedule', value)} />
       </section>
-      <section className="settings-section">
+      <section className="settings-section"><h2>会议</h2>
         <MeetingSettings client={client} enabled={draft.meetingPause} onChange={value => update('meetingPause', value)} notify={notify} />
       </section>
-      <section className="settings-section appearance-section"><h2><Sun size={15} />外观</h2><div className="theme-picker" role="group" aria-label="外观">{([{ value: 'system', label: '跟随系统', icon: Monitor }, { value: 'light', label: '浅色', icon: Sun }, { value: 'dark', label: '深色', icon: Moon }] as { value: Theme; label: string; icon: typeof Sun }[]).map(({ value, label, icon: Icon }) => <button key={value} className={draft.theme === value ? 'selected' : ''} aria-pressed={draft.theme === value} onClick={() => { update('theme', value); onPreviewTheme?.(value) }}><Icon size={15} />{label}</button>)}</div></section>
-      {shell && <section className="settings-section"><h2><Power size={15} />系统</h2><LaunchAtLogin shell={shell} notify={notify} /></section>}
+      <section className="settings-section appearance-section"><h2>外观</h2><div className="theme-picker" role="group" aria-label="外观">{([{ value: 'system', label: '跟随系统' }, { value: 'light', label: '浅色' }, { value: 'dark', label: '深色' }] as { value: Theme; label: string }[]).map(({ value, label }) => <button key={value} className={draft.theme === value ? 'selected' : ''} aria-pressed={draft.theme === value} onClick={() => { update('theme', value); onPreviewTheme?.(value) }}>{label}</button>)}</div></section>
+      {shell && <section className="settings-section"><h2>系统</h2><LaunchAtLogin shell={shell} notify={notify} /></section>}
       {updates && <SoftwareUpdate client={updates} />}
     </fieldset></div>
-    <footer className="settings-footer">{error && <p className="form-error" role="alert">{error}</p>}<div><button className="button secondary" disabled={saving} onClick={onClose}>取消</button><button className="button primary" disabled={saving} title="保存设置 (⌘ / Ctrl + Enter)" onClick={() => void save()}><Check size={16} />{saving ? '保存中…' : '保存设置'}</button></div></footer>
+    <footer className="settings-footer">{error && <p className="form-error" role="alert">{error}</p>}<div><button className="button secondary" disabled={saving} onClick={onClose}>取消</button><button className="button primary" disabled={saving} title="保存设置 (⌘ / Ctrl + Enter)" onClick={() => void save()}>{saving ? '保存中…' : '保存设置'}</button></div></footer>
   </section>
 }

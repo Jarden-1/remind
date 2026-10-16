@@ -14,7 +14,7 @@ import { ReminderEngine } from '../domain/reminder-engine'
 import { PreferencesStore, HistoryStore } from '../services/preferences'
 import { macNativeUpdateSupported } from '../services/code-signature'
 import { Updates, type UpdatePort } from '../services/updates'
-import { shouldHidePanel, panelBounds } from '../domain/panel-window'
+import { shouldHidePanel, panelBounds, DEFAULT_PANEL_HEIGHT, fitPanelHeight } from '../domain/panel-window'
 import { trayPresentation } from '../domain/tray-status'
 import { classifyInstallLocation, desiredOpenAtLogin, launchedHidden, loginItemsSettingsUrl, LoginItems, type LoginItemState } from '../services/login-item'
 
@@ -47,7 +47,7 @@ let recoveryTimer: ReturnType<typeof setTimeout> | undefined
 let loginItem: LoginItemState = { openAtLogin: false, status: 'unsupported', approvalNeeded: false, message: null }
 let panelSettingsOpen = false
 const panelWidth = 368
-const panelHeight = 440
+let panelContentHeight = DEFAULT_PANEL_HEIGHT
 
 function state(): DesktopState { return { revision: ++stateRevision, reminder: engine.snapshot, update: updates.snapshot, launchAtLogin: loginItem.openAtLogin, loginItem } }
 function broadcast() {
@@ -121,7 +121,7 @@ function showPanel() {
     return
   }
   if (!panel || panel.isDestroyed()) {
-    const created = makeWindow('panel', { width: panelWidth, height: panelHeight, resizable: false, frame: false, minimizable: true, skipTaskbar: true, alwaysOnTop: true })
+    const created = makeWindow('panel', { width: panelWidth, height: panelContentHeight, resizable: false, frame: false, minimizable: true, skipTaskbar: true, alwaysOnTop: true })
     panel = created.window
     panelSettingsOpen = false
     panel.webContents.on('render-process-gone', (_event, details) => {
@@ -140,7 +140,7 @@ function placePanel() {
   const anchor = tray?.getBounds()
   const point = anchor && anchor.width > 0 ? { x: anchor.x + anchor.width / 2, y: anchor.y + anchor.height / 2 } : screen.getCursorScreenPoint()
   const area = screen.getDisplayNearestPoint(point).workArea
-  panel.setBounds(panelBounds(area, point, process.platform, panelSettingsOpen), false)
+  panel.setBounds(panelBounds(area, point, process.platform, panelSettingsOpen, panelContentHeight), false)
   panel.show(); panel.focus()
 }
 function closeBreakWindows() {
@@ -302,6 +302,17 @@ function setupIpc() {
     trusted(event, ['panel'])
     panelSettingsOpen = z.boolean().parse(input)
     placePanel()
+  })
+  ipcMain.handle('remind:panel-size', (event, input: unknown) => {
+    const entry = trusted(event, ['panel'])
+    const height = z.number().int().min(200).max(1200).parse(input)
+    if (panelSettingsOpen || engine.snapshot.preparingBreak || engine.snapshot.phase === 'break') return
+    panelContentHeight = height
+    if (!entry.window.isVisible() || entry.window.isMinimized()) return
+    const bounds = entry.window.getBounds()
+    const area = screen.getDisplayMatching(bounds).workArea
+    const next = fitPanelHeight(bounds, area, height, process.platform)
+    if (bounds.height !== next.height || bounds.y !== next.y) entry.window.setBounds(next, false)
   })
   ipcMain.handle('remind:window', (event, input: unknown) => {
     const entry = trusted(event, ['panel'])

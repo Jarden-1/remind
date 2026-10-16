@@ -80,11 +80,23 @@ describe('actual React controls', () => {
   })
   it('limits the schedule editor to twelve periods and identifies an incomplete period inline', async () => {
     await act(async () => root.render(<Settings settings={client.getSnapshot().settings} client={client} onClose={() => {}} notify={notify} playSound={() => {}} />))
+    const toggle = [...document.querySelectorAll('label')].find(label => label.textContent?.includes('限定工作时段'))!.querySelector('input')!
+    await click(toggle)
     for (let count = 1; count < 12; count++) await click(button('添加时段'))
     expect(button('添加时段').disabled).toBe(true)
     await click(button('保存设置'))
     expect(document.activeElement?.getAttribute('aria-label')).toBe('时段 2 开始')
     expect(document.querySelector('[role="alert"]')?.closest('.time-range-field')).not.toBeNull()
+  })
+  it('reveals an invalid hidden schedule on save so the user can correct it', async () => {
+    await act(async () => root.render(<Settings settings={client.getSnapshot().settings} client={client} onClose={() => {}} notify={notify} playSound={() => {}} />))
+    const toggle = [...document.querySelectorAll('label')].find(label => label.textContent?.includes('限定工作时段'))!.querySelector('input')!
+    expect(document.querySelector('.schedule-editor')).toBeNull()
+    await click(toggle); await click(button('添加时段')); await click(toggle)
+    expect(document.querySelector('.schedule-editor')).toBeNull()
+    await click(button('保存设置'))
+    expect(document.querySelector('.schedule-editor')).not.toBeNull()
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('时段 2 开始')
   })
   it('opens an unclipped menu, navigates options and returns focus on Escape', async () => {
     await act(async () => root.render(<Harness />))

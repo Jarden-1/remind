@@ -12,6 +12,7 @@ const bridge: DesktopBridge = {
   settings: settings => ipcRenderer.invoke('remind:settings', settings),
   update: action => ipcRenderer.invoke('remind:update', action),
   panel: settingsOpen => ipcRenderer.invoke('remind:panel', settingsOpen),
+  resizePanel: contentHeight => ipcRenderer.invoke('remind:panel-size', contentHeight),
   ready: () => ipcRenderer.invoke('remind:ready'),
   minimize: () => ipcRenderer.invoke('remind:window', 'minimize'),
   quit: () => ipcRenderer.invoke('remind:window', 'quit'),
