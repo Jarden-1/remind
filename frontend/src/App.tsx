@@ -10,12 +10,14 @@ import { Chime } from './lib/sound'
 import type { DesktopView } from '../../shared/desktop'
 import type { ShellClient, UpdateClient } from './services/desktop-client'
 import type { Theme } from '../../shared/reminder'
+import { TrayActions } from './features/TrayActions'
 
 export function App({ client, preview, updates, shell, desktopView, desktopSound = false }: { client: ReminderClient; preview?: PreviewControls; updates?: UpdateClient; shell?: ShellClient; desktopView?: DesktopView; desktopSound?: boolean }) {
   const snapshot = useSyncExternalStore(client.subscribe, client.getSnapshot)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [previewTheme, setPreviewTheme] = useState<Theme | null>(null)
   const restoreSettingsFocus = useRef(false)
+  const keyboardInput = useRef(false)
   const [toast, setToast] = useState('')
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const chime = useRef(new Chime())
@@ -29,8 +31,18 @@ export function App({ client, preview, updates, shell, desktopView, desktopSound
   useEffect(() => {
     if (settingsOpen || !restoreSettingsFocus.current) return
     restoreSettingsFocus.current = false
-    document.querySelector<HTMLButtonElement>('[aria-label="打开设置"]')?.focus()
+    document.querySelector<HTMLElement>(keyboardInput.current ? '[aria-label="打开设置"]' : '.panel')?.focus({ preventScroll: true })
   }, [settingsOpen])
+  useEffect(() => {
+    const keyboard = () => { keyboardInput.current = true }
+    const pointer = () => { keyboardInput.current = false }
+    const focusPanel = () => document.querySelector<HTMLElement>('.panel')?.focus({ preventScroll: true })
+    window.addEventListener('keydown', keyboard, true)
+    window.addEventListener('pointerdown', pointer, true)
+    if (desktopView === 'panel') focusPanel()
+    const unsubscribe = desktopView === 'panel' ? window.remind?.onPanelShown?.(focusPanel) : undefined
+    return () => { window.removeEventListener('keydown', keyboard, true); window.removeEventListener('pointerdown', pointer, true); unsubscribe?.() }
+  }, [desktopView])
   function notify(message: string) { clearTimeout(toastTimer.current); setToast(message); toastTimer.current = setTimeout(() => setToast(''), 4000) }
   function playSound() { void chime.current.play().catch(() => notify('暂时无法播放铃声，请重试')) }
   useEffect(() => {
@@ -77,6 +89,7 @@ export function App({ client, preview, updates, shell, desktopView, desktopSound
   const preReminder = <aside className="pre-reminder" role="status"><span>1 分钟后休息</span><button className="icon-button" aria-label="关闭提前提醒" onClick={() => void client.dismissPreReminder().catch(error => notify(errorMessage(error)))}><X size={14} strokeWidth={1.6} /></button></aside>
   const feedback = toast && <div className="toast" role="status"><Info size={16} />{toast}</div>
   if (desktopView === 'notice') return <>{snapshot.preReminderVisible && preReminder}{feedback}</>
+  if (desktopView === 'tray-menu') return <TrayActions snapshot={snapshot} client={client} />
   if (desktopView === 'break') return <><BreakScreen snapshot={snapshot} client={client} notify={notify} desktop />{feedback}</>
   return <>
     <main className="preview-stage" hidden={breaking && !desktopView}><div className="window-wrap">{settingsOpen ? <Settings settings={snapshot.settings} client={client} updates={updates} shell={shell} onClose={closeSettings} onPreviewTheme={setPreviewTheme} notify={notify} playSound={playSound} /> : <Panel snapshot={snapshot} client={client} updates={updates} shell={shell} onSettings={openSettings} notify={notify} />}</div>{preview && <PreviewToolbar controls={preview} snapshot={snapshot} />}</main>

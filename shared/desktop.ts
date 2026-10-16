@@ -4,7 +4,7 @@ import type { LoginItemState } from './login-item'
 export interface Preferences { settings: ReminderSettings; started: boolean; manualPaused: boolean; openAtLogin: boolean; loginItemChosen: boolean; pauseUntil: string | null }
 export const commands = ['start', 'pause', 'pause30', 'pause60', 'pauseUntilTomorrow', 'resume', 'resetTimer', 'startBreak', 'endBreak', 'snooze', 'dismissPreReminder'] as const
 export type ReminderCommand = typeof commands[number]
-export type DesktopView = 'panel' | 'break' | 'notice'
+export type DesktopView = 'panel' | 'break' | 'notice' | 'tray-menu'
 export type UpdateDelivery = 'native' | 'browser'
 export interface UpdateSnapshot {
   revision: number
@@ -30,9 +30,11 @@ export interface DesktopBridge {
   minimize(): Promise<void>
   quit(): Promise<void>
   setLaunchAtLogin(enabled: boolean): Promise<LaunchAtLoginResult>
-  refreshLaunchAtLogin(): Promise<void>
+  refreshLaunchAtLogin(force?: boolean): Promise<void>
   openLoginItemsSettings(): Promise<void>
   meeting(action: 'ignore' | 'permissions' | 'refresh'): Promise<void>
+  onPanelShown?(listener: () => void): () => void
+  tray?(action: 'open' | 'enter' | 'leave' | 'quit'): Promise<void>
 }
 
 declare global { interface Window { remind?: DesktopBridge } }

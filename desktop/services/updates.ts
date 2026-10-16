@@ -47,6 +47,7 @@ export class Updates {
     port.subscribe(event => this.receive(event))
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
+  setDelivery(delivery: UpdateDelivery) { this.delivery = delivery; this.set({ delivery }) }
   onDiscovered(listener: (version: string) => void) { this.discovered = listener }
   /** First check after a short delay, then every six hours. Unsupported builds never contact the server. */
   arm(timers: UpdateTimers = defaultTimers, delayMs = updateCheckDelayMs, intervalMs = updateCheckIntervalMs) {

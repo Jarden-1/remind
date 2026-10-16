@@ -41,6 +41,15 @@ async function fill(input: HTMLInputElement, value: string) {
 }
 
 describe('actual React controls', () => {
+  it('returns pointer users to the panel and keyboard users to the settings control', async () => {
+    await act(async () => root.render(<App client={client} />))
+    await act(async () => button('打开设置').dispatchEvent(new Event('pointerdown', { bubbles: true })))
+    await click(button('打开设置')); await click(button('取消'))
+    expect(document.activeElement).toBe(document.querySelector('.panel'))
+    await key(button('打开设置'), 'Enter'); await click(button('打开设置'))
+    await key(document.querySelector('.settings-window')!, 'Escape')
+    expect(document.activeElement).toBe(button('打开设置'))
+  })
   it('lets keyboard users reach custom minutes and explains invalid entries before saving', async () => {
     await act(async () => root.render(<Harness />))
     const trigger = button('休息时长')

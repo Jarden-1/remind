@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { createRequire } from 'node:module'
 import { z } from 'zod'
 import { meetingAppIds, type MeetingState } from '../../../shared/meeting'
 import { MeetingMonitor, type MeetingObservation } from './monitor'
@@ -8,6 +9,14 @@ const observationSchema = z.object({
   apps: z.array(z.object({ id: z.enum(meetingAppIds), status: z.enum(['active', 'inactive', 'unknown']), version: z.string().max(64).optional() })).max(2),
 }).refine(value => new Set(value.apps.map(app => app.id)).size === value.apps.length)
 export function parseObservation(value: string): MeetingObservation { return observationSchema.parse(JSON.parse(value)) }
+/** A stable Node-API module runs AX calls in this application's process, off the UI thread. */
+export function macMeetingProbe(modulePath: string): () => Promise<MeetingObservation> {
+  let addon: { observe(): Promise<string> } | undefined
+  return async () => {
+    addon ??= createRequire(import.meta.url)(modulePath)
+    return parseObservation(await addon!.observe())
+  }
+}
 export function nativeMeetingProbe(executable: string): Promise<MeetingObservation> {
   return new Promise((resolve, reject) => execFile(executable, [], { timeout: 3000, maxBuffer: 16 * 1024, windowsHide: true, encoding: 'utf8' }, (error, stdout) => {
     if (error) { reject(new Error('meeting_probe_failed')); return }

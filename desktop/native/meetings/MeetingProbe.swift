@@ -26,7 +26,7 @@ func inMeetingRoute(_ identifier: String) -> Bool {
     return ["inmeeting", "inmeeting_revision", "inmeeting_secondary_wnd", "inmeeting_revision_float_child_window", "inmeeting_share_toolbar_window"].contains { identifier.contains("wemeet://page/" + $0 + ".") }
 }
 
-if CommandLine.arguments.contains("--self-test") {
+func selfTest() {
     precondition(isMeeting(["离开会议", "取消静音"]))
     precondition(isMeeting(["Leave meeting", "Mute"]))
     precondition(!isMeeting(["加入会议", "麦克风"]))
@@ -37,16 +37,16 @@ if CommandLine.arguments.contains("--self-test") {
     precondition(inMeetingRoute("QApplication.wemeet://page/inmeeting_revision.DialogWidget"))
     precondition(!inMeetingRoute("QApplication.wemeet://page/inmeeting_revision_end_meeting.DialogWidget"))
     precondition(!inMeetingRoute("QApplication.wemeet://page/inmeeting/waitingroom.DialogWidget"))
-    print("meeting-probe self-test passed"); exit(0)
+
 }
 
-let deadline = Date().addingTimeInterval(2.3)
 func attribute(_ element: AXUIElement, _ name: String) -> (AXError, CFTypeRef?) {
+    AXUIElementSetMessagingTimeout(element, 0.1)
     var value: CFTypeRef?
     let error = AXUIElementCopyAttributeValue(element, name as CFString, &value)
     return (error, value)
 }
-func inspect(_ app: NSRunningApplication) -> String {
+func inspect(_ app: NSRunningApplication, deadline: Date) -> String {
     let root = AXUIElementCreateApplication(app.processIdentifier)
     AXUIElementSetMessagingTimeout(root, 0.15)
     let (error, value) = attribute(root, kAXWindowsAttribute)
@@ -82,18 +82,29 @@ func inspect(_ app: NSRunningApplication) -> String {
     }
     return uncertain ? "unknown" : "inactive"
 }
-let trusted = AXIsProcessTrusted()
+func snapshot() throws -> String {
+let deadline = Date().addingTimeInterval(2.3)
+var trusted = AXIsProcessTrusted()
 let allowlist: [(String, [String])] = [
     ("tencent-meeting", ["com.tencent.meeting", "com.tencent.tencentmeeting", "com.tencent.wemeet"]),
     ("feishu", ["com.bytedance.Lark", "com.electron.lark", "com.larksuite.lark"])
 ]
 let running = NSWorkspace.shared.runningApplications
+// A trust flag can remain stale after the Settings toggle changes. Only a
+// successful protected read from an allowlisted app can confirm effective access.
+if !trusted {
+    let bundles = allowlist.flatMap { $0.1 }
+    for app in running where bundles.contains(app.bundleIdentifier ?? "") {
+        let root = AXUIElementCreateApplication(app.processIdentifier)
+        if attribute(root, kAXWindowsAttribute).0 == .success { trusted = true; break }
+    }
+}
 let records: [[String: Any]] = allowlist.map { id, bundles in
     let apps = running.filter { app in guard let bundle = app.bundleIdentifier else { return false }; return bundles.contains(bundle) }
     var status = apps.isEmpty ? "inactive" : trusted ? "inactive" : "unknown"
     if trusted {
         for app in apps {
-            let observed = inspect(app)
+            let observed = inspect(app, deadline: deadline)
             if observed == "active" { status = "active"; break }
             if observed == "unknown" { status = "unknown" }
         }
@@ -103,4 +114,16 @@ let records: [[String: Any]] = allowlist.map { id, bundles in
     return record
 }
 let data = try JSONSerialization.data(withJSONObject: ["protocol": 1, "permission": trusted ? "granted" : "required", "apps": records], options: [.sortedKeys])
-FileHandle.standardOutput.write(data)
+return String(decoding: data, as: UTF8.self)
+}
+
+// Loaded into remind itself: TCC evaluates the app the user authorized, not a
+// separate executable. The Node wrapper runs this bounded scan off the UI thread.
+@_cdecl("remind_meeting_snapshot")
+public func nativeSnapshot() -> UnsafeMutablePointer<CChar>? {
+    autoreleasepool { try? strdup(snapshot()) }
+}
+@_cdecl("remind_meeting_free")
+public func nativeFree(_ value: UnsafeMutablePointer<CChar>?) { free(value) }
+@_cdecl("remind_meeting_self_test")
+public func nativeSelfTest() { selfTest() }

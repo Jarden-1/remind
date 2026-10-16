@@ -12,7 +12,7 @@ export interface ShellClient {
   getLaunchAtLogin(): boolean
   getLoginItem(): LoginItemState
   setLaunchAtLogin(enabled: boolean): Promise<string | null>
-  refreshLaunchAtLogin(): Promise<void>
+  refreshLaunchAtLogin(force?: boolean): Promise<void>
   openLoginItemsSettings(): Promise<void>
   minimize(): Promise<void>
   quit(): Promise<void>
@@ -54,7 +54,7 @@ export class DesktopClient implements ReminderClient, UpdateClient, ShellClient 
     const result = await this.bridge.setLaunchAtLogin(enabled)
     return result.approvalNeeded ? null : result.message
   }
-  refreshLaunchAtLogin = () => this.bridge.refreshLaunchAtLogin()
+  refreshLaunchAtLogin = (force = false) => this.bridge.refreshLaunchAtLogin(force)
   openLoginItemsSettings = () => this.bridge.openLoginItemsSettings()
   minimize = () => this.bridge.minimize()
   quit = () => this.bridge.quit()

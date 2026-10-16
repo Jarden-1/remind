@@ -14,8 +14,8 @@ function LaunchAtLogin({ shell, notify }: { shell: ShellClient; notify: (message
   const item = useSyncExternalStore(shell.subscribe, shell.getLoginItem)
   const [pending, setPending] = useState(false)
   useEffect(() => {
-    const refresh = () => { void shell.refreshLaunchAtLogin().catch(() => {}) }
-    refresh()
+    const refresh = () => { void shell.refreshLaunchAtLogin(true).catch(() => {}) }
+    void shell.refreshLaunchAtLogin().catch(() => {})
     window.addEventListener('focus', refresh)
     return () => window.removeEventListener('focus', refresh)
   }, [shell])

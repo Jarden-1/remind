@@ -34,6 +34,15 @@ function clock() {
   } }
 }
 describe('user controlled updates', () => {
+  it('enables native installation after deferred signature verification without resetting discovery', async () => {
+    const { updates, port, emit } = setup(true, 'browser')
+    emit({ type: 'available', version: '0.2.0' })
+    await updates.action('download'); expect(port.download).not.toHaveBeenCalled()
+    updates.setDelivery('native')
+    expect(updates.snapshot.version).toBe('0.2.0')
+    expect(updates.snapshot.status).toBe('available')
+    await updates.action('download'); expect(port.download).toHaveBeenCalledOnce()
+  })
   it('does not download or install unless the user asks, including right after startup', async () => {
     const { updates, port, emit } = setup()
     expect(port.check).not.toHaveBeenCalled()

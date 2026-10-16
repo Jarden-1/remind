@@ -6,7 +6,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import log from 'electron-log/main'
 import electronUpdater from 'electron-updater'
 import { z } from 'zod'
-import { MeetingService, nativeMeetingProbe } from '../services/meetings/service'
+import { MeetingService, nativeMeetingProbe, macMeetingProbe } from '../services/meetings/service'
 import { meetingNames } from '../../shared/meeting'
 import { commands, type DesktopView, type DesktopState } from '../../shared/desktop'
 import { settingsSchema } from '../domain/validation'
@@ -16,6 +16,7 @@ import { macNativeUpdateSupported } from '../services/code-signature'
 import { Updates, type UpdatePort } from '../services/updates'
 import { shouldHidePanel, panelBounds, DEFAULT_PANEL_HEIGHT, fitPanelHeight } from '../domain/panel-window'
 import { trayPresentation } from '../domain/tray-status'
+import { TrayHover } from '../domain/tray-hover'
 import { classifyInstallLocation, desiredOpenAtLogin, launchedHidden, loginItemsSettingsUrl, LoginItems, type LoginItemState } from '../services/login-item'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -30,6 +31,9 @@ let quitting = false
 let panel: BrowserWindow | null = null
 let notice: BrowserWindow | null = null
 let tray: Tray | null = null
+let trayCard: BrowserWindow | null = null
+let trayCardLoad: Promise<void> | undefined
+let trayHover: TrayHover | undefined
 let engine: ReminderEngine
 let updates!: Updates
 let meetings: MeetingService | undefined
@@ -46,6 +50,8 @@ let tickTimer: ReturnType<typeof setInterval> | undefined
 let recoveryTimer: ReturnType<typeof setTimeout> | undefined
 let loginItem: LoginItemState = { openAtLogin: false, status: 'unsupported', approvalNeeded: false, message: null }
 let panelSettingsOpen = false
+let lastLoginRefresh = 0
+let loginRefreshRequired = false
 const panelWidth = 368
 let panelContentHeight = DEFAULT_PANEL_HEIGHT
 
@@ -98,6 +104,7 @@ function makeWindow(view: DesktopView, options: Electron.BrowserWindowConstructo
 }
 function quitApp() {
   quitting = true
+  hideTrayCard()
   engine?.shutdown()
   clearInterval(tickTimer)
   clearTimeout(recoveryTimer)
@@ -114,10 +121,14 @@ function minimizePanel(target: BrowserWindow) {
   if (!target.isDestroyed() && shouldHidePanel(process.platform, target.isVisible())) target.hide()
 }
 function showPanel() {
+  hideTrayCard()
+  openPanel(true)
+}
+function openPanel(reveal: boolean) {
   if (breakWindows.length && (engine.snapshot.phase === 'break' || engine.snapshot.preparingBreak)) {
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
     const active = breakWindows.find(window => windowDisplays.get(window.id) === display.id) ?? breakWindows[0]
-    if (!active.isDestroyed() && active.isVisible()) active.focus()
+    if (reveal && !active.isDestroyed() && active.isVisible()) active.focus()
     return
   }
   if (!panel || panel.isDestroyed()) {
@@ -129,19 +140,46 @@ function showPanel() {
       if (!created.window.isDestroyed()) created.window.destroy()
     })
     panel.on('close', event => { if (!quitting) { event.preventDefault(); panel?.hide() } })
-    panel.on('focus', () => refreshLoginFromOs())
-    void created.load().then(() => placePanel()).catch(error => log.error('Panel failed to load', error))
-  } else { placePanel(); broadcast() }
+    panel.on('focus', () => {
+      if (loginRefreshRequired) { loginRefreshRequired = false; refreshLoginFromOs(true) }
+      void meetings?.checkNow()
+    })
+    const started = performance.now()
+    void created.load().then(() => { log.info('Panel loaded in', Math.round(performance.now() - started), 'ms'); if (reveal) placePanel() }).catch(error => log.error('Panel failed to load', error))
+  } else if (reveal) { placePanel(); broadcast() }
 }
-function placePanel() {
+function placePanel(reveal = true) {
   if (!panel || panel.isDestroyed() || engine.snapshot.preparingBreak || engine.snapshot.phase === 'break') return
+  if (!reveal && !panel.isVisible()) return
   if (panel.isMinimized()) panel.restore()
   panel.setAlwaysOnTop(true)
   const anchor = tray?.getBounds()
   const point = anchor && anchor.width > 0 ? { x: anchor.x + anchor.width / 2, y: anchor.y + anchor.height / 2 } : screen.getCursorScreenPoint()
   const area = screen.getDisplayNearestPoint(point).workArea
   panel.setBounds(panelBounds(area, point, process.platform, panelSettingsOpen, panelContentHeight), false)
-  panel.show(); panel.focus()
+  if (reveal) {
+    panel.show(); panel.focus()
+    if (!panelSettingsOpen) panel.webContents.send('remind:panel-shown')
+  }
+}
+function hideTrayCard() {
+  trayHover?.cancel()
+}
+function prepareTrayCard() {
+  if (trayCard && !trayCard.isDestroyed()) return trayCardLoad!
+  const created = makeWindow('tray-menu', { width: 176, height: 172, resizable: false, frame: false, skipTaskbar: true, alwaysOnTop: true, focusable: false })
+  trayCard = created.window
+  trayCardLoad = created.load().catch(error => { created.window.destroy(); trayCard = null; throw error })
+  return trayCardLoad
+}
+function showTrayCard() {
+  if (!trayCard || trayCard.isDestroyed() || panel?.isVisible() || engine.snapshot.preparingBreak || engine.snapshot.phase === 'break') return
+  const anchor = tray!.getBounds()
+  const point = { x: anchor.x + anchor.width / 2, y: anchor.y + anchor.height }
+  const area = screen.getDisplayNearestPoint(point).workArea
+  const bounds = panelBounds(area, point, process.platform, false, 172)
+  trayCard.setBounds({ ...bounds, width: 176, x: Math.round(Math.max(area.x + 8, Math.min(point.x - 88, area.x + area.width - 184))) })
+  trayCard.showInactive(); broadcast()
 }
 function closeBreakWindows() {
   const windows = breakWindows; breakWindows = []
@@ -216,6 +254,7 @@ function refreshBreakDisplayLayout() {
   if (removed.length) breakWindows[0]?.focus()
 }
 async function prepareBreak(generation: number) {
+  hideTrayCard()
   preparingGeneration = generation
   closeBreakWindows()
   let timeout: ReturnType<typeof setTimeout> | undefined
@@ -241,6 +280,7 @@ async function prepareBreak(generation: number) {
     if (powerMonitor.getSystemIdleState(60) === 'locked') engine.setSystemPause('locked', true)
     if (engine.generation !== generation || !engine.snapshot.preparingBreak) return
     restorePanelAfterBreak = panel?.isVisible() ?? false
+    hideTrayCard()
     panel?.hide()
     for (const window of breakWindows) {
       const display = screen.getAllDisplays().find(item => item.id === windowDisplays.get(window.id))
@@ -265,7 +305,7 @@ function syncWindows() {
     void created.load().then(() => { if (engine.snapshot.preReminderVisible && !created.window.isDestroyed()) created.window.showInactive() }).catch(error => log.error(error))
   } else if (!s.preReminderVisible && notice) { const old = notice; notice = null; old.destroy() }
 }
-function trusted(event: IpcMainInvokeEvent, views: DesktopView[] = ['panel', 'break', 'notice']) {
+function trusted(event: IpcMainInvokeEvent, views: DesktopView[] = ['panel', 'break', 'notice', 'tray-menu']) {
   const entry = managed.get(event.sender.id)
   if (!entry || !views.includes(entry.view) || event.senderFrame !== event.sender.mainFrame || event.senderFrame.url !== entry.url) throw new Error('不允许的请求')
   return entry
@@ -281,6 +321,10 @@ function setupIpc() {
     const command = z.enum(commands).parse(input)
     if (entry.view === 'notice' && command !== 'dismissPreReminder') throw new Error('不允许的操作')
     if (entry.view === 'break' && command !== 'endBreak' && command !== 'snooze') throw new Error('不允许的操作')
+    if (entry.view === 'tray-menu') {
+      if (!['start', 'pause', 'resume', 'resetTimer'].includes(command)) throw new Error('不允许的操作')
+      hideTrayCard()
+    }
     engine.command(command)
     if (['start', 'pause', 'pause30', 'pause60', 'pauseUntilTomorrow', 'resume', 'resetTimer', 'snooze'].includes(command)) persist()
   })
@@ -301,7 +345,7 @@ function setupIpc() {
   ipcMain.handle('remind:panel', (event, input: unknown) => {
     trusted(event, ['panel'])
     panelSettingsOpen = z.boolean().parse(input)
-    placePanel()
+    placePanel(false)
   })
   ipcMain.handle('remind:panel-size', (event, input: unknown) => {
     const entry = trusted(event, ['panel'])
@@ -334,8 +378,16 @@ function setupIpc() {
     broadcast()
     return { openAtLogin: loginItem.openAtLogin, message: loginItem.message, approvalNeeded: loginItem.approvalNeeded }
   })
-  ipcMain.handle('remind:launch-at-login-refresh', event => { trusted(event, ['panel']); refreshLoginFromOs() })
-  ipcMain.handle('remind:login-item-settings', event => { trusted(event, ['panel']); return shell.openExternal(loginItemsSettingsUrl) })
+  ipcMain.handle('remind:launch-at-login-refresh', (event, force: unknown) => { trusted(event, ['panel']); refreshLoginFromOs(z.boolean().parse(force ?? false)) })
+  ipcMain.handle('remind:login-item-settings', event => { trusted(event, ['panel']); loginRefreshRequired = true; return shell.openExternal(loginItemsSettingsUrl) })
+  ipcMain.handle('remind:tray', (event, input: unknown) => {
+    trusted(event, ['tray-menu'])
+    const action = z.enum(['open', 'enter', 'leave', 'quit']).parse(input)
+    if (action === 'open') showPanel()
+    else if (action === 'quit') quitApp()
+    else if (action === 'enter') trayHover?.enterCard()
+    else trayHover?.leave()
+  })
   ipcMain.handle('remind:meeting', async (event, input: unknown) => {
     trusted(event, ['panel'])
     const action = z.enum(['ignore', 'permissions', 'refresh']).parse(input)
@@ -361,8 +413,10 @@ function persistLogin() {
   try { preferences.write(engine.getPreferences()); engine.setStorageError(false) }
   catch (error) { engine.setStorageError(true); log.error(error); throw new Error('开机自启动状态无法保存，请重试') }
 }
-function refreshLoginFromOs() {
+function refreshLoginFromOs(force = false) {
   if (!engine) return
+  if (!force && performance.now() - lastLoginRefresh < 15_000) return
+  lastLoginRefresh = performance.now()
   const prefs = engine.getPreferences()
   loginItem = loginItems.refresh(desiredOpenAtLogin(prefs.loginItemChosen, prefs.openAtLogin))
   broadcast()
@@ -375,16 +429,25 @@ function setupTray() {
   }
   tray = new Tray(icon())
   nativeTheme.on('updated', () => tray?.setImage(icon()))
-  tray.on('click', () => { if (panel?.isVisible()) panel.hide(); else showPanel() })
+  trayHover = new TrayHover({
+    prepare: prepareTrayCard,
+    canShow: () => !quitting && !panel?.isVisible() && !engine.snapshot.preparingBreak && engine.snapshot.phase !== 'break',
+    show: showTrayCard, hide: () => { if (trayCard && !trayCard.isDestroyed()) trayCard.hide() }, report: error => log.error('Tray hover failed', error),
+  })
+  tray.on('click', () => { hideTrayCard(); if (panel?.isVisible()) panel.hide(); else showPanel() })
+  if (process.platform === 'darwin') tray.setIgnoreDoubleClickEvents(true)
+  tray.on('mouse-enter', () => trayHover?.enter())
+  tray.on('mouse-leave', () => trayHover?.leave())
+  let contextMenu: Menu
+  tray.on('right-click', () => { hideTrayCard(); panel?.hide(); if (contextMenu) tray?.popUpContextMenu(contextMenu) })
   const rebuildMenu = () => {
     const s = engine.snapshot
-    tray?.setContextMenu(Menu.buildFromTemplate([
+    contextMenu = Menu.buildFromTemplate([
       { label: '打开看板', click: showPanel },
       { label: s.phase === 'ready' ? '开始提醒' : s.pauseReasons.includes('manual') ? '继续提醒' : '暂停提醒', click: () => { engine.command(s.phase === 'ready' ? 'start' : s.pauseReasons.includes('manual') ? 'resume' : 'pause'); persist() } },
-      { label: '现在休息', enabled: !s.pauseReasons.some(reason => ['locked', 'suspended', 'meeting', 'updating'].includes(reason)) && s.phase !== 'break' && !s.preparingBreak, click: () => engine.command('startBreak') },
       { label: '重置计时', click: () => { engine.command('resetTimer'); persist() } },
       { type: 'separator' }, { label: '退出 remind', click: quitApp },
-    ]))
+    ])
   }
   let menuKey = ''
   let statusKey = ''
@@ -395,7 +458,7 @@ function setupTray() {
     statusKey = next
     // setTitle is macOS-only. A leading space separates the template icon from the live text.
     if (process.platform === 'darwin') tray?.setTitle(title ? ` ${title}` : '')
-    tray?.setToolTip(tooltip)
+    if (process.platform !== 'darwin') tray?.setToolTip(`${tooltip}\n点击打开看板 · 右键快捷操作`)
   }
   engine.subscribe(() => {
     refreshStatus()
@@ -415,7 +478,7 @@ else {
   app.on('second-instance', () => { if (engine) showPanel() })
   app.on('window-all-closed', () => {})
   app.on('activate', () => { if (engine) showPanel() })
-  app.on('before-quit', () => { quitting = true; engine?.shutdown(); clearInterval(tickTimer); clearTimeout(recoveryTimer); updates?.stop(); meetings?.stop() })
+  app.on('before-quit', () => { quitting = true; hideTrayCard(); engine?.shutdown(); clearInterval(tickTimer); clearTimeout(recoveryTimer); updates?.stop(); meetings?.stop() })
   void app.whenReady().then(async () => {
     log.initialize(); log.transports.file.maxSize = 1024 * 1024
     Menu.setApplicationMenu(null)
@@ -427,11 +490,12 @@ else {
       location: installLocation,
       report: error => log.error('Login item unavailable', error),
     })
-    loginItems.refresh(preferences.initial.openAtLogin)
+    loginItem = loginItems.refresh(preferences.initial.openAtLogin)
+    lastLoginRefresh = performance.now()
     const loginReading = loginItems.launchReading
     const chosen = preferences.initial.loginItemChosen
     const desired = desiredOpenAtLogin(chosen, preferences.initial.openAtLogin)
-    applyLoginItem(desired)
+    if (loginItem.openAtLogin !== desired && !loginItem.approvalNeeded) applyLoginItem(desired)
     const initial = { ...preferences.initial, openAtLogin: desired, loginItemChosen: chosen }
     if (preferences.initial.openAtLogin !== desired || preferences.initial.loginItemChosen !== chosen) {
       try { preferences.write(initial) } catch (error) { log.error('Cannot sync login item', error) }
@@ -444,8 +508,9 @@ else {
     try { history = new HistoryStore(app.getPath('userData')) }
     catch (error) { log.error('History unavailable; reminders remain active', error) }
     engine.onEvent(event => { try { history?.append(event) } catch (error) { log.error('Cannot save break history', error) } })
-    const probe = app.isPackaged ? join(process.resourcesPath, 'native', process.platform === 'win32' ? 'meeting-probe.exe' : 'meeting-probe') : join(app.getAppPath(), 'desktop/native/bin', process.platform === 'win32' ? 'meeting-probe.exe' : 'meeting-probe')
-    meetings = new MeetingService(() => ['darwin', 'win32'].includes(process.platform) ? nativeMeetingProbe(probe) : Promise.resolve({ protocol: 1, permission: 'unsupported', apps: [] }), state => {
+    const nativeDirectory = app.isPackaged ? join(process.resourcesPath, 'native') : join(app.getAppPath(), 'desktop/native/bin')
+    const probe = process.platform === 'darwin' ? macMeetingProbe(join(nativeDirectory, 'meeting-probe.node')) : () => nativeMeetingProbe(join(nativeDirectory, 'meeting-probe.exe'))
+    meetings = new MeetingService(() => ['darwin', 'win32'].includes(process.platform) ? probe() : Promise.resolve({ protocol: 1, permission: 'unsupported', apps: [] }), state => {
       const wasMeeting = engine.snapshot.pauseReasons.includes('meeting')
       const previousStatus = engine.snapshot.meeting?.status
       engine.setMeeting(state)
@@ -475,7 +540,8 @@ else {
       install() { autoUpdater.quitAndInstall(false, true) },
     }
     const packagedUpdates = app.isPackaged && existsSync(join(process.resourcesPath, 'app-update.yml')) && (process.platform === 'darwin' || process.platform === 'win32')
-    const delivery = packagedUpdates && process.platform === 'darwin' && !await macNativeUpdateSupported() ? 'browser' : 'native'
+    // Start with the safe manual path. Signature inspection must not delay the UI or IPC registration.
+    const delivery = process.platform === 'darwin' ? 'browser' : 'native'
     updates = new Updates(port, app.getVersion(), packagedUpdates, () => !engine.snapshot.preparingBreak && engine.snapshot.phase !== 'break' && !engine.snapshot.pauseReasons.some(reason => ['meeting', 'locked', 'suspended', 'updating'].includes(reason)), app.isPackaged ? '此测试包不支持在线更新' : undefined, delivery)
     updates.onDiscovered(version => {
       if (quitting) return
@@ -487,6 +553,7 @@ else {
     })
     updates.arm()
     setupIpc(); setupTray()
+    if (packagedUpdates && process.platform === 'darwin') void macNativeUpdateSupported().then(supported => { if (!quitting) updates.setDelivery(supported ? 'native' : 'browser') })
     engine.subscribe(() => { meetings?.suspend(engine.snapshot.pauseReasons.some(reason => reason === 'locked' || reason === 'suspended')); broadcast(); syncWindows() })
     updates.subscribe(() => { engine.setSystemPause('updating', updates?.snapshot.status === 'installing'); broadcast() })
     nativeAutoUpdater.on('before-quit-for-update', () => { quitting = true })
@@ -506,5 +573,7 @@ else {
     screen.on('display-added', displaysChanged); screen.on('display-removed', displaysChanged); screen.on('display-metrics-changed', displaysChanged)
     tickTimer = setInterval(() => { engine.tick(); if (engine.takePauseExpired()) persist() }, 250)
     if (!openedHidden) showPanel()
+    else openPanel(false)
+    setTimeout(() => { if (!quitting) void prepareTrayCard().catch(error => log.error('Tray warmup failed', error)) }, 1000)
   }).catch(error => { log.error('Startup failed', error); dialog.showErrorBox('remind 无法启动', '请检查本地数据目录是否可写，然后重试。'); quitting = true; app.quit() })
 }

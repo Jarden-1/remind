@@ -156,7 +156,7 @@ export function Panel({ snapshot: s, client, onSettings, notify, updates, shell 
     return () => window.removeEventListener('keydown', onKey)
   }, [editing, menu, ready, manual, s.phase, s.preparingBreak, client])
 
-  return <section className="app-window panel" aria-label="休息提醒看板">
+  return <section className="app-window panel" tabIndex={-1} aria-label="休息提醒看板">
     <header className="window-header">
       <Brand />
       <div className="window-controls">

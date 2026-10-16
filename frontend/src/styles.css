@@ -79,6 +79,11 @@ p, h1, h2 { margin: 0; }
 .window-wrap { width: 368px; max-width: 100%; }
 .app-window { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: var(--window-radius); box-shadow: var(--shadow); overflow: hidden; }
 .panel { display: flex; flex-direction: column; }
+.panel:focus { outline: none; }
+.tray-actions { padding: 6px; background: var(--surface); }
+.tray-actions button { display: block; width: 100%; height: 36px; padding: 0 12px; border: 0; border-radius: 5px; background: transparent; color: var(--ink); font: inherit; text-align: left; }
+.tray-actions button:hover:not(:disabled) { background: var(--hover); }
+.tray-actions hr { height: 1px; border: 0; background: var(--border); margin: 7px 6px 8px; }
 .panel-content { display: flow-root; }
 .window-header { display: flex; align-items: center; justify-content: space-between; padding: 14px var(--panel-inset); flex-shrink: 0; }
 .brand { display: flex; align-items: center; gap: 7px; font-size: 18px; letter-spacing: -0.5px; font-weight: 500; }

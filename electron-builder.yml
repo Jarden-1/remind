@@ -10,7 +10,7 @@ asar: true
 extraResources:
   - from: desktop/native/bin
     to: native
-    filter: [meeting-probe, meeting-probe.exe]
+    filter: [meeting-probe.node, libmeeting-probe.dylib, meeting-probe.exe]
 publish:
   provider: github
   owner: Jarden-1
