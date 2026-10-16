@@ -7,6 +7,10 @@ files:
   - out/**
   - package.json
 asar: true
+extraResources:
+  - from: desktop/native/bin
+    to: native
+    filter: [meeting-probe.node, libmeeting-probe.dylib, meeting-probe.exe]
 publish:
   provider: github
   owner: Jarden-1

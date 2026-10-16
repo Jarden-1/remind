@@ -428,3 +428,14 @@ interface BreakRecord {
 当前已通过依赖引入 Electron、electron-vite、electron-store、electron-log、electron-updater 和 Zod，保留依赖许可证；未复制调研仓库的业务代码，也没有确认仓库对外许可证。GPL 项目用于行为研究；如果以后决定复制或 fork，先确定与本项目发布许可策略一致，不能去掉署名改成自己的许可证。
 
 设计调整用简短决策记录保留原因。只有新事实、用户审核或验证失败才改动已选方案，避免无依据地反复更换框架。
+
+
+### v0.1.5 实现补充（2026-10-15）
+
+当前落地事件格式见 shared/break-events.ts：v2 的 plannedSeconds／actualSeconds 对应计划／已观察展示时长；completed、skipped、snoozed、interrupted、display_failed 分别记录。旧 v1 记录继续读取，未知更高版本不覆盖。时长不累计休眠或不可确认的长调度间隔；正常退出主动结束当前事件。上面的完整奖励／崩溃恢复模型仍是后续设计，不能把当前 JSON 记录直接视为可靠奖励账本。
+
+IPC 增加整份 DesktopState 的单调 revision，登录项变更与初始快照也参与排序；窗口、计时和更新的独立版本不能替代整份快照顺序。菜单采用 portal 和视口约束；自启动服务隔离系统 API 异常，开发数据与正式安装分开。
+
+### 会议接入的当前实现（2026-10-15）
+
+本轮采用 Swift Accessibility 与 C# UI Automation 的小型辅助程序，不采集音频，替代原先优先研究的音频输入信号方案。通用去抖与失败策略位于 desktop/services/meetings，状态进入主进程计时核心；原始控件内容不出辅助程序。默认关闭且标记实验性，真实客户端支持矩阵待验收，详见 [会议接入说明](MEETINGS.md)。

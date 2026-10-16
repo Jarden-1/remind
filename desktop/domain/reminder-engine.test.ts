@@ -9,6 +9,17 @@ function setup(overrides: Partial<ReturnType<typeof freshPreferences>> = {}) {
   return { engine, advance, jump, clockJump: (ms: number) => { wall += ms; engine.tick() } }
 }
 describe('native reminder engine', () => {
+  it('automatically closes the heads-up after five seconds without cancelling or repeating the scheduled break', () => {
+    const { engine, advance } = setup()
+    engine.command('start'); advance(44 * 60_000)
+    expect(engine.snapshot.preReminderVisible).toBe(true)
+    advance(4_000); expect(engine.snapshot.preReminderVisible).toBe(true)
+    advance(1_000); expect(engine.snapshot.preReminderVisible).toBe(false)
+    expect(engine.snapshot.remainingSeconds).toBe(55)
+    advance(54_000); expect(engine.snapshot.preReminderVisible).toBe(false)
+    expect(engine.snapshot.preparingBreak).toBe(false)
+    advance(1_000); expect(engine.snapshot.preparingBreak).toBe(true)
+  })
   it('holds manual pause across ticks and restart, keeping it independent of lock and suspend', () => {
     const { engine, advance } = setup()
     engine.command('start'); advance(75_000); engine.command('pause')
@@ -174,6 +185,89 @@ describe('native reminder engine', () => {
     engine.command('snooze')
     expect(engine.snapshot.phase).toBe('work')
     expect(engine.snapshot.remainingSeconds).toBe(300)
-    expect(events.at(-1)?.outcome).toBe('skipped')
+    expect(events.at(-1)?.outcome).toBe('snoozed')
+  })
+})
+
+describe('reminder lifecycle edge cases', () => {
+  it('does not count an unobserved long gap as a completed voluntary break during manual pause', () => {
+    const { engine, jump } = setup()
+    const events: BreakEvent[] = []; engine.onEvent(event => events.push(event))
+    engine.command('pause'); engine.command('startBreak'); engine.confirmBreak(engine.generation)
+    jump(10 * 60_000)
+    expect(engine.snapshot.phase).not.toBe('break')
+    expect(engine.snapshot.pauseReasons).toContain('manual')
+    expect(events.at(-1)?.outcome).toBe('interrupted')
+  })
+  it('starts a complete five-minute snooze cycle even with a one-minute configured interval', () => {
+    const prefs = freshPreferences(); prefs.settings.workMinutes = 1
+    const { engine, advance } = setup(prefs)
+    engine.command('startBreak'); engine.confirmBreak(engine.generation); engine.command('snooze')
+    expect(engine.snapshot.totalSeconds).toBe(300)
+    expect(engine.snapshot.remainingSeconds).toBe(300)
+    advance(240_000)
+    expect(engine.snapshot.preReminderVisible).toBe(true)
+    advance(60_000); expect(engine.snapshot.preparingBreak).toBe(true)
+  })
+  it('ignores stale failure callbacks after a break already ended', () => {
+    const { engine } = setup()
+    engine.command('startBreak'); engine.confirmBreak(engine.generation); engine.command('endBreak')
+    engine.failBreak(engine.generation)
+    expect(engine.snapshot.displayError).toBe(false)
+  })
+  it('continues warnings across adjacent work ranges that have no actual rest gap', () => {
+    const prefs = freshPreferences(); prefs.settings.workMinutes = 30; prefs.settings.schedule.enabled = true
+    prefs.settings.schedule.ranges = [{ start: '09:00', end: '09:30' }, { start: '09:30', end: '18:00' }]
+    const { engine, advance } = setup(prefs)
+    engine.command('start'); advance(29 * 60_000)
+    expect(engine.snapshot.preReminderVisible).toBe(true)
+  })
+})
+
+describe('observed break records', () => {
+  it('records the original planned duration and only observed display time, once per break', () => {
+    const { engine, advance } = setup(); const events: BreakEvent[] = []
+    engine.onEvent(event => events.push(event))
+    engine.command('startBreak'); engine.confirmBreak(engine.generation); advance(12_000)
+    engine.updateSettings({ ...engine.snapshot.settings, breakMinutes: 5 }); engine.command('snooze'); engine.command('endBreak')
+    expect(events).toHaveLength(2)
+    expect(events[1]).toMatchObject({ version: 2, plannedSeconds: 180, actualSeconds: 12, outcome: 'snoozed' })
+    expect(events[1].id).toBe(events[0].id)
+  })
+})
+
+it('records a normal quit as interruption once without changing the manual pause preference', () => {
+  const { engine, advance } = setup(); const events: BreakEvent[] = []
+  engine.onEvent(event => events.push(event))
+  engine.command('pause'); engine.command('startBreak'); engine.confirmBreak(engine.generation); advance(5000)
+  engine.shutdown(); engine.shutdown()
+  expect(events).toHaveLength(2)
+  expect(events.at(-1)).toMatchObject({ outcome: 'interrupted', actualSeconds: 5 })
+  expect(engine.getPreferences().manualPaused).toBe(true)
+})
+
+describe('confirmed meeting integration', () => {
+  const active = { status: 'active' as const, apps: ['tencent-meeting' as const], permission: 'granted' as const, message: null }
+  const inactive = { ...active, status: 'inactive' as const, apps: [] }
+  it('interrupts a visible break and cannot be overridden by startBreak or resume', () => {
+    const { engine } = setup(); const events: BreakEvent[] = []; engine.onEvent(event => events.push(event))
+    engine.command('startBreak'); engine.confirmBreak(engine.generation); engine.setMeeting(active)
+    expect(events.at(-1)?.outcome).toBe('interrupted'); expect(engine.snapshot.phase).not.toBe('break')
+    engine.command('resume'); engine.command('startBreak'); expect(engine.snapshot.preparingBreak).toBe(false)
+    expect(engine.snapshot.pauseReasons).toContain('meeting')
+  })
+  it('keeps a manual pause after meeting end and resets the work interval', () => {
+    const { engine, advance } = setup(); engine.command('start'); advance(20000); engine.command('pause'); engine.setMeeting(active)
+    engine.setMeeting(inactive); expect(engine.snapshot.pauseReasons).toEqual(['manual']); expect(engine.snapshot.remainingSeconds).toBe(2700)
+  })
+  it('retains meeting pause for unknown after a call, while unknown before one does not freeze work', () => {
+    const { engine, advance } = setup(); engine.command('start'); engine.setMeeting({ ...inactive, status: 'unknown' }); advance(1000)
+    expect(engine.snapshot.remainingSeconds).toBe(2699); engine.setMeeting(active); engine.setMeeting({ ...active, status: 'unknown' }); advance(2000)
+    expect(engine.snapshot.remainingSeconds).toBe(2700); expect(engine.snapshot.pauseReasons).toContain('meeting')
+  })
+  it('defers only automatic breaks under uncertain detection without a display failure', () => {
+    const { engine, advance } = setup(); engine.command('start'); advance(45 * 60000)
+    expect(engine.deferAutomaticBreak()).toBe(true); expect(engine.snapshot.displayError).toBe(false); expect(engine.snapshot.remainingSeconds).toBe(2700)
+    engine.command('startBreak'); expect(engine.deferAutomaticBreak()).toBe(false); expect(engine.confirmBreak(engine.generation)).toBe(true)
   })
 })

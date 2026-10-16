@@ -12,7 +12,7 @@ export interface ShellClient {
   getLaunchAtLogin(): boolean
   getLoginItem(): LoginItemState
   setLaunchAtLogin(enabled: boolean): Promise<string | null>
-  refreshLaunchAtLogin(): Promise<void>
+  refreshLaunchAtLogin(force?: boolean): Promise<void>
   openLoginItemsSettings(): Promise<void>
   minimize(): Promise<void>
   quit(): Promise<void>
@@ -30,13 +30,9 @@ export class DesktopClient implements ReminderClient, UpdateClient, ShellClient 
     catch (error) { client.dispose(); throw error }
   }
   private receive(state: DesktopState) {
-    const stale = this.current && this.current.reminder.revision > state.reminder.revision && this.current.update.revision > state.update.revision
-    this.current = {
-      reminder: this.current && this.current.reminder.revision > state.reminder.revision ? this.current.reminder : state.reminder,
-      update: this.current && this.current.update.revision > state.update.revision ? this.current.update : state.update,
-      launchAtLogin: stale ? this.current.launchAtLogin : state.launchAtLogin,
-      loginItem: stale ? this.current.loginItem : state.loginItem,
-    }
+    // A whole-state revision also orders login-item changes with unchanged timer/update revisions.
+    if (this.current && state.revision <= this.current.revision) return
+    this.current = state
     for (const listener of this.listeners) listener()
   }
   getSnapshot = (): ReminderSnapshot => this.current.reminder
@@ -58,11 +54,14 @@ export class DesktopClient implements ReminderClient, UpdateClient, ShellClient 
     const result = await this.bridge.setLaunchAtLogin(enabled)
     return result.approvalNeeded ? null : result.message
   }
-  refreshLaunchAtLogin = () => this.bridge.refreshLaunchAtLogin()
+  refreshLaunchAtLogin = (force = false) => this.bridge.refreshLaunchAtLogin(force)
   openLoginItemsSettings = () => this.bridge.openLoginItemsSettings()
   minimize = () => this.bridge.minimize()
   quit = () => this.bridge.quit()
   resetTimer = () => this.command('resetTimer')
   snooze = () => this.command('snooze')
+  ignoreMeeting = () => this.bridge.meeting('ignore')
+  openMeetingPermissions = () => this.bridge.meeting('permissions')
+  refreshMeeting = () => this.bridge.meeting('refresh')
   dispose() { this.unsubscribe(); this.listeners.clear() }
 }

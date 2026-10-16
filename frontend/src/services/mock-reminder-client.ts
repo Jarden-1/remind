@@ -1,6 +1,7 @@
 import { type ReminderClient, type ReminderSettings, type ReminderSnapshot, type PreviewControls } from '../contracts/reminder'
 import { getScheduleState, validateSettings } from '../domain/schedule'
 import { freshPreferences, type PreferenceStore, type SavedPreferences } from './storage'
+import { PRE_REMINDER_DISPLAY_MS } from '../../../shared/reminder'
 
 interface Clock { now(): Date; monotonic(): number }
 const browserClock: Clock = { now: () => new Date(), monotonic: () => performance.now() }
@@ -10,6 +11,7 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
   private prefs: SavedPreferences
   private listeners = new Set<() => void>()
   private remainingMs: number
+  private workTotalMs: number
   private breakTotalMs = 0
   private isBreak = false
   private meeting = false
@@ -31,7 +33,8 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
       this.prefs.manualPaused = false
       this.prefs.pauseUntil = null
     }
-    this.remainingMs = this.prefs.settings.workMinutes * 60_000
+    this.workTotalMs = this.prefs.settings.workMinutes * 60_000
+    this.remainingMs = this.workTotalMs
     this.lastTick = clock.monotonic()
     this.previouslyOutside = !getScheduleState(this.prefs.settings, clock.now()).allowed
     this.publish()
@@ -45,7 +48,8 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
     catch { this.storageError = true }
   }
   private resetCycle() {
-    this.isBreak = false; this.remainingMs = this.prefs.settings.workMinutes * 60_000
+    this.workTotalMs = this.prefs.settings.workMinutes * 60_000
+    this.isBreak = false; this.remainingMs = this.workTotalMs
     this.preSent = false; this.preVisible = false; this.lastTick = this.clock.monotonic()
   }
   private reasons() {
@@ -61,11 +65,13 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
       revision: (this.snapshot?.revision ?? 0) + 1,
       phase: this.isBreak ? 'break' : this.prefs.started ? 'work' : 'ready',
       settings: structuredClone(this.prefs.settings),
+      plannedBreakSeconds: this.isBreak ? this.breakTotalMs / 1000 : this.prefs.settings.breakMinutes * 60,
       remainingSeconds: Math.ceil(this.remainingMs / 1000),
-      totalSeconds: this.isBreak ? this.breakTotalMs / 1000 : this.prefs.settings.workMinutes * 60,
+      totalSeconds: this.isBreak ? this.breakTotalMs / 1000 : this.workTotalMs / 1000,
       pauseReasons: this.reasons(), pauseUntil: this.prefs.manualPaused ? this.prefs.pauseUntil : null, preReminderVisible: this.preVisible,
       lastInPeriod: !this.isBreak && this.outsideOverride === null && !!schedule.endAt && this.clock.now().getTime() + this.remainingMs >= schedule.endAt.getTime(),
       nextWorkAt: schedule.nextAt?.toISOString() ?? null, storageError: this.storageError,
+      meeting: { status: this.meeting ? 'active' : this.prefs.settings.meetingPause ? 'inactive' : 'disabled', apps: this.meeting ? ['tencent-meeting'] : [], permission: 'granted', message: null },
     }
     this.listeners.forEach(listener => listener())
   }
@@ -89,8 +95,8 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
         if (this.isBreak) this.resetCycle()
         else if (!this.snapshot.lastInPeriod) this.beginBreak()
       } else if (!this.isBreak && this.prefs.settings.preReminder && !this.preSent &&
-        this.prefs.settings.workMinutes > 1 && this.remainingMs <= 60_000 && !this.snapshot.lastInPeriod) {
-        this.preSent = true; this.preVisible = true; this.preHideAt = now + 12_000
+        this.workTotalMs > 60_000 && this.remainingMs <= 60_000 && !this.snapshot.lastInPeriod) {
+        this.preSent = true; this.preVisible = true; this.preHideAt = now + PRE_REMINDER_DISPLAY_MS
       }
     }
     this.publish()
@@ -131,7 +137,8 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
     this.prefs.started = true
     this.prefs.manualPaused = false
     this.prefs.pauseUntil = null
-    this.remainingMs = 5 * 60_000
+    this.workTotalMs = 5 * 60_000
+    this.remainingMs = this.workTotalMs
     this.lastTick = this.clock.monotonic()
     this.save()
     this.publish()
@@ -153,6 +160,7 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
   updateSettings = async (settings: ReminderSettings) => {
     const error = validateSettings(settings)
     if (error) throw new Error(error)
+    this.tick()
     const previous = this.prefs.settings
     const scheduleChanged = JSON.stringify(previous.schedule) !== JSON.stringify(settings.schedule)
     const reset = previous.workMinutes !== settings.workMinutes || scheduleChanged
@@ -161,7 +169,7 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
     if (!settings.meetingPause && previous.meetingPause) { this.meeting = false; this.resetCycle() }
     if (reset && !this.isBreak) this.resetCycle()
     const outside = this.outsideOverride ?? !getScheduleState(settings, this.clock.now()).allowed
-    if (outside && !this.previouslyOutside) this.resetCycle()
+    if (outside !== this.previouslyOutside) this.resetCycle()
     this.previouslyOutside = outside
     if (!settings.preReminder) this.preVisible = false
     this.save(); this.publish()
@@ -172,6 +180,7 @@ export class MockReminderClient implements ReminderClient, PreviewControls {
     // A preview injects the confirmed signal, without claiming real OS detection.
     this.resetCycle(); this.publish()
   }
+  ignoreMeeting = async () => { this.meeting = false; this.resetCycle(); this.publish() }
   setOutsideSchedule(active: boolean) {
     this.outsideOverride = active; this.previouslyOutside = active
     this.resetCycle(); this.publish()

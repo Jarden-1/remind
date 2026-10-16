@@ -12,11 +12,18 @@ const bridge: DesktopBridge = {
   settings: settings => ipcRenderer.invoke('remind:settings', settings),
   update: action => ipcRenderer.invoke('remind:update', action),
   panel: settingsOpen => ipcRenderer.invoke('remind:panel', settingsOpen),
+  resizePanel: contentHeight => ipcRenderer.invoke('remind:panel-size', contentHeight),
   ready: () => ipcRenderer.invoke('remind:ready'),
   minimize: () => ipcRenderer.invoke('remind:window', 'minimize'),
   quit: () => ipcRenderer.invoke('remind:window', 'quit'),
   setLaunchAtLogin: enabled => ipcRenderer.invoke('remind:launch-at-login', enabled),
-  refreshLaunchAtLogin: () => ipcRenderer.invoke('remind:launch-at-login-refresh'),
+  refreshLaunchAtLogin: force => ipcRenderer.invoke('remind:launch-at-login-refresh', force ?? false),
   openLoginItemsSettings: () => ipcRenderer.invoke('remind:login-item-settings'),
+  meeting: action => ipcRenderer.invoke('remind:meeting', action),
+  onPanelShown(listener) {
+    ipcRenderer.on('remind:panel-shown', listener)
+    return () => { ipcRenderer.removeListener('remind:panel-shown', listener) }
+  },
+  tray: action => ipcRenderer.invoke('remind:tray', action),
 }
 contextBridge.exposeInMainWorld('remind', bridge)

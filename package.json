@@ -1,6 +1,6 @@
 {
   "name": "remind-desktop",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "private": true,
   "type": "module",
   "description": "A quiet desktop break reminder",
@@ -15,12 +15,13 @@
   ],
   "scripts": {
     "postinstall": "install-electron",
-    "dev": "electron-vite dev",
-    "build": "npm run typecheck && electron-vite build",
+    "dev": "npm run build:native && electron-vite dev",
+    "build": "npm run build:native && npm run typecheck && electron-vite build",
     "typecheck": "tsc -p desktop/tsconfig.json --noEmit && npm run build --workspace frontend",
     "test": "vitest run --config vitest.config.ts && npm run test --workspace frontend",
     "pack": "npm run build && electron-builder --dir --publish never",
-    "dist": "npm run build && electron-builder --publish never"
+    "dist": "npm run build && electron-builder --publish never",
+    "build:native": "node scripts/build-meeting-probe.mjs --universal"
   },
   "dependencies": {
     "electron-log": "5.4.4",
@@ -34,8 +35,10 @@
     "electron": "44.7.0",
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
+    "node-api-headers": "1.9.0",
     "typescript": "~5.9.3",
     "vite": "^7.3.7",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "yaml": "^2.9.1"
   }
 }

@@ -8,7 +8,7 @@ export interface LoginItemReading {
   status?: 'not-registered' | 'enabled' | 'requires-approval' | 'not-found'
 }
 
-export type LoginItemStatus = NonNullable<LoginItemReading['status']> | 'unsupported'
+export type LoginItemStatus = NonNullable<LoginItemReading['status']> | 'unsupported' | 'unavailable'
 export type InstallLocation = 'applications' | 'translocated' | 'volume' | 'other'
 
 export interface LoginItemState {
